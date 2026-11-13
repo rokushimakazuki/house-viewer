@@ -83,6 +83,11 @@
     <input class="hour" type="range" min="6" max="18" step="0.25" value="10">
     <span class="t">10:00</span>
   </div>
+  <div class="sunrow" style="margin-top:8px">
+    <span style="font-size:13px;color:var(--sub)">土地の傾き（南へ下がる）</span>
+    <input id="slope" type="range" min="0" max="8" step="0.5" value="3">
+    <span class="t" id="slopet" style="min-width:9em">3%</span>
+  </div>
   <label class="chk"><input type="checkbox" id="nbrchk" checked>周りの家を出す（航空写真から読んだ概算の箱。ARでは自動で消える）</label>
   <label class="chk"><input type="checkbox" id="ao" checked>部屋の隅の陰り（iPhone・パソコンのみ。重いときは外す）</label>
 
@@ -357,8 +362,8 @@ const nbr = new THREE.Group(); rig.add(nbr);
     const pts = h.c.map(([x, y]) => new THREE.Vector2((x - 477.75) / 100, (y - 409.5) / 100));
     // 壁：四角柱（Shape を XZ に置いて上へ押し出す）
     const shape = new THREE.Shape(pts.map((q) => new THREE.Vector2(q.x, -q.y)));
-    const wg = new THREE.ExtrudeGeometry(shape, { depth: EAVE, bevelEnabled: false });
-    wg.rotateX(-Math.PI / 2);
+    const wg = new THREE.ExtrudeGeometry(shape, { depth: EAVE + 3, bevelEnabled: false });
+    wg.rotateX(-Math.PI / 2); wg.translate(0, -3, 0);   // 地面の高さを変えても浮かないよう、下に3m伸ばしておく
     const wall = new THREE.Mesh(wg, wallM);
     // 屋根：重心を頂点にした四角すい（寄棟の代わり）
     const cx = pts.reduce((a, q) => a + q.x, 0) / 4, cz = pts.reduce((a, q) => a + q.y, 0) / 4;
@@ -369,11 +374,21 @@ const nbr = new THREE.Group(); rig.add(nbr);
     }
     const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); rg.computeVertexNormals();
     const roof = new THREE.Mesh(rg, roofM); roofM.side = THREE.DoubleSide;
-    for (const m of [wall, roof]) { m.castShadow = true; m.receiveShadow = true; nbr.add(m); }
+    const g = new THREE.Group(); g.userData.cz = cz; g.userData.name = h.n;
+    for (const m of [wall, roof]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
+    nbr.add(g);
   }
 })();
 const nbrChk = document.querySelector('#nbrchk');
 nbrChk.onchange = () => { nbr.visible = nbrChk.checked; };
+// 土地の傾き：家の中心から南へ1m離れるごとに slope% ずつ地面が下がる（北は上がる）
+function applySlope() {
+  const sl = parseFloat($('#slope').value) / 100;
+  let south = 0;
+  for (const g of nbr.children) { g.position.y = -sl * g.userData.cz; if (g.userData.name === '南の家') south = g.position.y; }
+  $('#slopet').textContent = (sl * 100).toFixed(1).replace('.0', '') + '%（南の家は約' + Math.abs(south).toFixed(1) + 'm低い）';
+}
+$('#slope').oninput = applySlope; applySlope();
 const FURN = [
   ['sofa_02', 656, 507, 4.712389],
   ['modern_coffee_table_01', 771, 464, 4.712389],
