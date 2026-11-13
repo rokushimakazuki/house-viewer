@@ -83,6 +83,7 @@
     <input class="hour" type="range" min="6" max="18" step="0.25" value="10">
     <span class="t">10:00</span>
   </div>
+  <label class="chk"><input type="checkbox" id="nbrchk" checked>周りの家を出す（航空写真から読んだ概算の箱。ARでは自動で消える）</label>
   <label class="chk"><input type="checkbox" id="ao" checked>部屋の隅の陰り（iPhone・パソコンのみ。重いときは外す）</label>
 
   <div class="lbl">見る</div>
@@ -192,7 +193,7 @@ const hemi = new THREE.HemisphereLight(0xfff4e6, 0x8a7a66, 0.45); scene.add(hemi
 const sun = new THREE.DirectionalLight(0xffffff, 2.8);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -13, right: 13, top: 13, bottom: -13, near: 1, far: 80 });
+Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, near: 1, far: 90 });
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
 const sunTarget = new THREE.Object3D(); scene.add(sunTarget); sun.target = sunTarget;
 scene.add(sun);
@@ -336,6 +337,43 @@ const models = {};
 
 // ---- 家具（Poly Haven, CC0）。平面図 cm と向き（ラジアン、Sweet Home 3D の値） ----
 const furn = new THREE.Group(); rig.add(furn);
+
+// ---- 周りの家（航空写真から読んだ概算。平面図 cm の四隅、2階建て想定：壁 5.8m・屋根の頂上 7.6m） ----
+// 位置・大きさは ±1〜2m 程度の目安。住所や写真は入れていない
+const NEIGHBORS = [
+  { n: '南の家',     c: [[19, 1202], [914, 1419], [761, 2098], [-80, 2015]] },
+  { n: '南の家2',    c: [[-14, 2268], [1002, 2473], [734, 3704], [-241, 3441]] },
+  { n: '南東の家',   c: [[970, 2183], [2303, 2341], [2096, 3683], [784, 3532]] },
+  { n: '東の家',     c: [[2457, 703], [3137, 762], [2846, 1752], [2321, 1645]] },
+  { n: '北東の家',   c: [[1680, -344], [2904, -499], [2943, 354], [1685, 466]] },
+  { n: '道路向かいの家', c: [[-1211, 771], [-522, 973], [-771, 2139], [-1460, 1937]] },
+];
+const nbr = new THREE.Group(); rig.add(nbr);
+(function buildNeighbors() {
+  const wallM = new THREE.MeshStandardMaterial({ color: 0xd8d0c2, roughness: 0.9 });
+  const roofM = new THREE.MeshStandardMaterial({ color: 0x4d5258, roughness: 0.8 });
+  const EAVE = 5.8, RIDGE = 7.6;
+  for (const h of NEIGHBORS) {
+    const pts = h.c.map(([x, y]) => new THREE.Vector2((x - 477.75) / 100, (y - 409.5) / 100));
+    // 壁：四角柱（Shape を XZ に置いて上へ押し出す）
+    const shape = new THREE.Shape(pts.map((q) => new THREE.Vector2(q.x, -q.y)));
+    const wg = new THREE.ExtrudeGeometry(shape, { depth: EAVE, bevelEnabled: false });
+    wg.rotateX(-Math.PI / 2);
+    const wall = new THREE.Mesh(wg, wallM);
+    // 屋根：重心を頂点にした四角すい（寄棟の代わり）
+    const cx = pts.reduce((a, q) => a + q.x, 0) / 4, cz = pts.reduce((a, q) => a + q.y, 0) / 4;
+    const pos = [];
+    for (let i = 0; i < 4; i++) {
+      const a = pts[i], b = pts[(i + 1) % 4];
+      pos.push(a.x, EAVE, a.y, cx, RIDGE, cz, b.x, EAVE, b.y);
+    }
+    const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); rg.computeVertexNormals();
+    const roof = new THREE.Mesh(rg, roofM); roofM.side = THREE.DoubleSide;
+    for (const m of [wall, roof]) { m.castShadow = true; m.receiveShadow = true; nbr.add(m); }
+  }
+})();
+const nbrChk = document.querySelector('#nbrchk');
+nbrChk.onchange = () => { nbr.visible = nbrChk.checked; };
 const FURN = [
   ['sofa_02', 656, 507, 4.712389],
   ['modern_coffee_table_01', 771, 464, 4.712389],
@@ -508,7 +546,7 @@ const handIndex = {};
 let pendingPlace = 0, last = performance.now();
 renderer.xr.addEventListener('sessionstart', () => { pendingPlace = 1; });
 renderer.xr.addEventListener('sessionend', () => {
-  scene.background = skyBg; ground.visible = true;
+  scene.background = skyBg; ground.visible = true; nbr.visible = nbrChk.checked;
   rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0);
 });
 
@@ -517,6 +555,7 @@ async function startXR(mode) {
     const session = await navigator.xr.requestSession(mode, { requiredFeatures: ['local-floor'], optionalFeatures: ['bounded-floor'] });
     const isAR = mode === 'immersive-ar';
     scene.background = isAR ? null : skyBg;
+    nbr.visible = !isAR && nbrChk.checked;   // ARでは本物の家が見えるので消す
     ground.visible = !isAR;
     await renderer.xr.setSession(session);
   } catch (e) { msg('開始できませんでした: ' + e.message); }
