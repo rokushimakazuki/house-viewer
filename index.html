@@ -53,7 +53,7 @@
   <div class="lbl">吹抜けの高窓</div>
   <div class="row" id="vars">
     <button data-v="A" class="on">A 低いFIX×2</button>
-    <button data-v="B">B 高いFIX×2</button>
+    <button data-v="B">B 少し上のFIX×2</button>
     <button data-v="C">C 横長FIX</button>
   </div>
 
@@ -151,7 +151,7 @@ const STARTS = {
   sofa: { p: new THREE.Vector3(1.0, 0, -1.2), d: new THREE.Vector3(2.2, 0, 3.6).normalize(), y: -FL1, name: 'リビング' },
   stake:{ p: new THREE.Vector3(-7.9095, 0, 6.3), d: new THREE.Vector3(1, 0, -0.4).normalize(), y: 0, name: '杭合わせ' },
 };
-const VAR_NAME = { A: 'A 低いFIX×2', B: 'B 高いFIX×2', C: 'C 横長FIX' };
+const VAR_NAME = { A: 'A 低いFIX×2', B: 'B 少し上のFIX×2', C: 'C 横長FIX' };
 
 const state = { v: 'A', start: 'out', stakeMode: false, stakeStep: 0, help: true };
 const $ = (s) => document.querySelector(s);
