@@ -57,6 +57,13 @@
     <button data-v="C">C 横長FIX</button>
   </div>
 
+  <div class="lbl">リビングの大きい窓の高さ（床から上端まで）</div>
+  <div class="row" id="hts">
+    <button data-h="20">2.0m</button>
+    <button data-h="22" class="on">2.2m</button>
+    <button data-h="24">2.4m</button>
+  </div>
+
   <div class="lbl">はじめの立ち位置</div>
   <div class="row" id="starts">
     <button data-s="out" class="on">家の外（南）</button>
@@ -99,6 +106,7 @@
       <tr><td>X ボタン</td><td>杭合わせモード 入／切</td></tr>
       <tr><td>右トリガー</td><td>（杭合わせ中）①緑の杭（南西）の根元で押す → ②黄色の杭（南東）の根元で押す</td></tr>
       <tr><td>Y ボタン</td><td>手元の説明を出す／消す</td></tr>
+      <tr><td>左グリップ（中指）</td><td>リビングの窓の高さを切り替え 2.0→2.2→2.4m</td></tr>
       <tr><td>右スティック 押し込み</td><td>日差しの時刻を1時間進める</td></tr>
       <tr><td>左スティック 押し込み</td><td>季節を切り替える（冬至→春分→夏至→秋分）</td></tr>
     </table>
@@ -112,6 +120,10 @@
   <div class="row">
     <select id="vp"></select>
     <button data-v="A" class="on">A</button><button data-v="B">B</button><button data-v="C">C</button>
+  </div>
+  <div class="row">
+    <span style="font-size:13px;color:var(--sub);align-self:center">リビングの窓</span>
+    <button data-h="20">2.0m</button><button data-h="22" class="on">2.2m</button><button data-h="24">2.4m</button>
   </div>
   <div class="row">
     <button id="pose">座る</button>
@@ -153,7 +165,7 @@ const STARTS = {
 };
 const VAR_NAME = { A: 'A 低いFIX×2', B: 'B 少し上のFIX×2', C: 'C 横長FIX' };
 
-const state = { v: 'A', start: 'out', stakeMode: false, stakeStep: 0, help: true };
+const state = { v: 'A', h: '22', start: 'out', stakeMode: false, stakeStep: 0, help: true };
 const $ = (s) => document.querySelector(s);
 const msg = (t) => { $('#msg').textContent = t; };
 
@@ -332,6 +344,8 @@ const FURN = [
   ['dining_chair_02', 507.5, 278, Math.PI], ['dining_chair_02', 557.5, 278, Math.PI], ['dining_chair_02', 607.5, 278, Math.PI],
 ];
 const FURN_ROT = { sofa_02: 0, modern_coffee_table_01: 0, potted_plant_02: 0, dining_chair_02: 0 };   // 素材ごとの正面の向きの補正
+let furnOK = false;
+function hideBoxFurniture(root) { root.traverse((m) => { if (m.isMesh && ['chair', 'lowtable'].includes(m.material.name)) m.visible = false; }); }
 function loadFurniture() {
   const ids = [...new Set(FURN.map((f) => f[0]))];
   const gl = new GLTFLoader();
@@ -347,8 +361,7 @@ function loadFurniture() {
         furn.add(o);
       }
       // 箱で作っていた椅子とローテーブルは隠す
-      if (src.dining_chair_02 && src.modern_coffee_table_01)
-        for (const k in models) models[k].traverse((m) => { if (m.isMesh && ['chair', 'lowtable'].includes(m.material.name)) m.visible = false; });
+      if (src.dining_chair_02 && src.modern_coffee_table_01) { furnOK = true; for (const k in models) hideBoxFurniture(models[k]); }
     });
 }
 
@@ -360,12 +373,27 @@ addEventListener('resize', () => {
 
 // ---- 読み込み ----
 const loader = new GLTFLoader();
-Promise.all(['A', 'B', 'C'].map((v) => new Promise((res, rej) => loader.load(`${v}.glb`, (g) => {
-  prepModel(g.scene);
-  models[v] = g.scene; g.scene.visible = v === state.v; rig.add(g.scene); res();
-}, undefined, rej)))).then(async () => {
+const loading = {};
+const curKey = () => state.v + '_' + state.h;
+function loadModel(k) {
+  if (!loading[k]) loading[k] = new Promise((res, rej) => loader.load(`${k}.glb`, (g) => {
+    prepModel(g.scene); if (furnOK) hideBoxFurniture(g.scene);
+    g.scene.visible = false; models[k] = g.scene; rig.add(g.scene); res(g.scene);
+  }, undefined, rej));
+  return loading[k];
+}
+async function showCurrent() {
+  const k = curKey();
+  if (!models[k]) msg('読み込み中…');
+  await loadModel(k);
+  if (k !== curKey()) return;            // 読み込み中に別の組み合わせが選ばれた
+  for (const m in models) models[m].visible = m === k;
   msg('');
+}
+showCurrent().then(async () => {
   loadFurniture();
+  // 残りの組み合わせを裏で読んでおく（切り替えを速くする）
+  (async () => { for (const v of ['A', 'B', 'C']) for (const h of ['20', '22', '24']) await loadModel(v + '_' + h).catch(() => {}); })();
   const ar = navigator.xr && await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
   const vr = navigator.xr && await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
   $('#ar').disabled = !ar; $('#vr').disabled = !vr;
@@ -374,11 +402,16 @@ Promise.all(['A', 'B', 'C'].map((v) => new Promise((res, rej) => loader.load(`${
 }).catch((e) => msg('読み込みに失敗しました: ' + e));
 
 function setVariant(v) {
-  state.v = v;
-  for (const k in models) models[k].visible = k === v;
+  state.v = v; showCurrent();
   document.querySelectorAll('#vars button, #bar button[data-v]').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
-  drawHud();
+  drawHud(); if (inside.on) label();
 }
+function setHeight(h) {
+  state.h = h; showCurrent();
+  document.querySelectorAll('button[data-h]').forEach((b) => b.classList.toggle('on', b.dataset.h === h));
+  drawHud(); if (inside.on) label();
+}
+document.querySelectorAll('button[data-h]').forEach((b) => b.onclick = () => setHeight(b.dataset.h));
 document.querySelectorAll('#vars button, #bar button[data-v]').forEach((b) => b.onclick = () => setVariant(b.dataset.v));
 document.querySelectorAll('#starts button').forEach((b) => b.onclick = () => {
   state.start = b.dataset.s;
@@ -426,7 +459,7 @@ function drawHud() {
   c.clearRect(0, 0, 640, 400);
   c.fillStyle = 'rgba(20,22,24,0.82)'; c.beginPath(); c.roundRect(0, 0, 640, 400, 28); c.fill();
   c.fillStyle = '#fff'; c.font = 'bold 40px sans-serif';
-  c.fillText('案 ' + VAR_NAME[state.v], 28, 60);
+  c.fillText('案 ' + VAR_NAME[state.v] + '／窓' + (state.h / 10).toFixed(1) + 'm', 28, 60);
   c.font = '28px sans-serif'; c.fillStyle = '#ffb27a';
   let line2 = '家の高さ ' + (rig.position.y >= 0 ? '+' : '') + rig.position.y.toFixed(2) + ' m';
   if (state.stakeMode) line2 = state.stakeStep === 0 ? '杭合わせ①：緑の杭（南西）の根元で右トリガー' : '杭合わせ②：黄色の杭（南東）の根元で右トリガー';
@@ -434,7 +467,7 @@ function drawHud() {
   c.fillStyle = '#d9dde0'; c.font = '26px sans-serif';
   c.fillStyle = '#ffe08a'; c.fillText('日差し ' + sunLabel(), 28, 150);
   c.fillStyle = '#d9dde0'; c.font = '24px sans-serif';
-  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝高さ（押し込み＝+1時間）', 'A：案を切替　B：はじめの位置に戻す', 'X：杭合わせ 入／切　Y：この表示を消す'];
+  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝高さ（押し込み＝+1時間）', 'A：案を切替　左グリップ：窓の高さ　B：はじめの位置に戻す', 'X：杭合わせ 入／切　Y：この表示を消す'];
   t.forEach((s, i) => c.fillText(s, 28, 200 + i * 48));
   hudTex.needsUpdate = true;
 }
@@ -517,6 +550,7 @@ renderer.setAnimationLoop((t, frame) => {
           rig.position.x -= mv.x; rig.position.z -= mv.z;
         }
         if (edge(4)) { state.stakeMode = !state.stakeMode; state.stakeStep = 0; drawHud(); }   // X
+        if (edge(1)) setHeight({ '20': '22', '22': '24', '24': '20' }[state.h]);              // 左グリップ
         if (edge(5)) { state.help = !state.help; }                                           // Y
         if (edge(3)) { nextSeason(); drawHud(); }                                             // 左スティック押し込み
       } else {
@@ -558,7 +592,7 @@ for (const k in VPS) { const o = document.createElement('option'); o.value = k; 
 
 const seated = () => inside.sit && VPS[inside.vp].fl !== 'g';
 function eyeY() { return FLH[VPS[inside.vp].fl] + (seated() ? 1.1 : 1.55); }
-function label() { $('#vpname').textContent = VPS[inside.vp].name + '・' + (seated() ? '座った目線' : '立った目線') + '・案' + state.v; }
+function label() { $('#vpname').textContent = VPS[inside.vp].name + '・' + (seated() ? '座った目線' : '立った目線') + '・案' + state.v + '・リビング窓' + (state.h / 10).toFixed(1) + 'm'; }
 function goVP(k) {
   inside.vp = k; vpSel.value = k;
   const v = VPS[k];
@@ -598,7 +632,6 @@ $('#pose').onclick = () => {
   inside.sit = !inside.sit; $('#pose').textContent = inside.sit ? '座る' : '立つ';
   camera.position.y = eyeY(); label();
 };
-document.querySelectorAll('#bar button[data-v]').forEach((b) => b.addEventListener('click', label));
 
 // 画面をなぞって見回す
 let drag = null;
