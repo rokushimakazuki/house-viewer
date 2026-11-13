@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>家の実物大ビュー</title>
+<style>
+  :root { --bg:#f4f2ee; --fg:#22262a; --sub:#5d646b; --card:#ffffffee; --line:#d9d5ce; --accent:#d85a10; --btn:#22262a; --btnfg:#fff; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#16181a; --fg:#eceae6; --sub:#a4a9ae; --card:#1f2225ee; --line:#3a3e42; --btn:#eceae6; --btnfg:#16181a; } }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; }
+  canvas { display:block; position:fixed; inset:0; width:100%; height:100%; }
+  #ui { position:fixed; left:16px; top:16px; width:min(380px, calc(100% - 32px)); max-height:calc(100% - 32px); overflow:auto;
+        background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; box-sizing:border-box; backdrop-filter:blur(6px); }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { color:var(--sub); font-size:13px; margin:0 0 12px; }
+  .lbl { font-size:12px; color:var(--sub); margin:12px 0 6px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  button { font:inherit; font-size:15px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--fg); padding:10px 14px; cursor:pointer; }
+  button.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
+  button.go { background:var(--btn); color:var(--btnfg); border-color:var(--btn); flex:1; font-weight:600; }
+  button:disabled { opacity:.4; cursor:default; }
+  #msg { font-size:13px; color:var(--accent); margin-top:10px; min-height:1em; }
+  details { margin-top:12px; font-size:13px; }
+  summary { cursor:pointer; color:var(--sub); }
+  table { border-collapse:collapse; width:100%; margin-top:6px; }
+  td { border-top:1px solid var(--line); padding:5px 4px; vertical-align:top; }
+  td:first-child { white-space:nowrap; color:var(--sub); }
+  #hide { position:absolute; right:10px; top:10px; padding:4px 10px; font-size:13px; }
+  #show { position:fixed; left:16px; top:16px; display:none; }
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="ui">
+  <button id="hide">隠す</button>
+  <h1>家の実物大ビュー</h1>
+  <p class="sub">吹抜けの高窓 3案の比較用。Meta Quest 3 のブラウザで開くと、実物大で見られます。</p>
+
+  <div class="lbl">吹抜けの高窓</div>
+  <div class="row" id="vars">
+    <button data-v="A" class="on">A 低いFIX×2</button>
+    <button data-v="B">B 高いFIX×2</button>
+    <button data-v="C">C 横長FIX</button>
+  </div>
+
+  <div class="lbl">はじめの立ち位置</div>
+  <div class="row" id="starts">
+    <button data-s="out" class="on">家の外（南）</button>
+    <button data-s="sofa">リビングから見上げ</button>
+    <button data-s="stake">杭に合わせる</button>
+  </div>
+
+  <div class="lbl">見る</div>
+  <div class="row">
+    <button class="go" id="ar" disabled>ARで見る</button>
+    <button class="go" id="vr" disabled>VRで見る</button>
+  </div>
+  <div id="msg">読み込み中…</div>
+
+  <details open>
+    <summary>Quest 3 での操作</summary>
+    <table>
+      <tr><td>左スティック</td><td>歩く（家の中・外を移動）</td></tr>
+      <tr><td>右スティック 左右</td><td>向きを変える</td></tr>
+      <tr><td>右スティック 上下</td><td>家の高さを上げ下げ（地面に合わせる）</td></tr>
+      <tr><td>A ボタン</td><td>案を切り替え A→B→C</td></tr>
+      <tr><td>B ボタン</td><td>はじめの位置に戻す（今いる場所・向きが基準）</td></tr>
+      <tr><td>X ボタン</td><td>杭合わせモード 入／切</td></tr>
+      <tr><td>右トリガー</td><td>（杭合わせ中）①緑の杭（南西）の根元で押す → ②黄色の杭（南東）の根元で押す</td></tr>
+      <tr><td>Y ボタン</td><td>手元の説明を出す／消す</td></tr>
+    </table>
+    <p class="sub" style="margin-top:8px">AR＝周りの景色の中に家が出る。VR＝周りは見えず、家と芝生だけ。家の中を見るときは、1階の床が足元に来るように置きます。</p>
+  </details>
+</div>
+<button id="show">操作パネル</button>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---- モデル座標（m）。X=東、Z=南、Y=地面からの高さ。1階床は地面+0.59 ----
+const FL1 = 0.59;
+const STAKE = { SW: new THREE.Vector3(-7.9095, 0, 4.844), SE: new THREE.Vector3(6.1315, 0, 4.881) };
+const STARTS = {
+  out:  { p: new THREE.Vector3(0.6, 0, 9.5),  d: new THREE.Vector3(0, 0, -1), y: 0,    name: '家の外（南）' },
+  sofa: { p: new THREE.Vector3(1.0, 0, -1.2), d: new THREE.Vector3(2.2, 0, 3.6).normalize(), y: -FL1, name: 'リビング' },
+  stake:{ p: new THREE.Vector3(-7.9095, 0, 6.3), d: new THREE.Vector3(1, 0, -0.4).normalize(), y: 0, name: '杭合わせ' },
+};
+const VAR_NAME = { A: 'A 低いFIX×2', B: 'B 高いFIX×2', C: 'C 横長FIX' };
+
+const state = { v: 'A', start: 'out', stakeMode: false, stakeStep: 0, help: true };
+const $ = (s) => document.querySelector(s);
+const msg = (t) => { $('#msg').textContent = t; };
+
+// ---- three.js ----
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.xr.enabled = true;
+renderer.xr.setReferenceSpaceType('local-floor');
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const SKY = new THREE.Color(0xc9d6de);
+scene.background = SKY;
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a7a, 1.4));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(-5, 10, 8); scene.add(sun);
+
+const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 48), new THREE.MeshStandardMaterial({ color: 0x8f9a86, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.002; scene.add(ground);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 300);
+camera.position.set(6, 9, 22);
+const orbit = new OrbitControls(camera, renderer.domElement);
+orbit.target.set(0, 2.5, 0); orbit.update();
+
+const rig = new THREE.Group(); scene.add(rig);   // 家全体。位置と向きはここで動かす
+const models = {};
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ---- 読み込み ----
+const loader = new GLTFLoader();
+Promise.all(['A', 'B', 'C'].map((v) => new Promise((res, rej) => loader.load(`${v}.glb`, (g) => {
+  g.scene.traverse((o) => { if (o.isMesh && o.material && o.material.name === 'glass') { o.material.transparent = true; o.material.depthWrite = false; } });
+  models[v] = g.scene; g.scene.visible = v === state.v; rig.add(g.scene); res();
+}, undefined, rej)))).then(async () => {
+  msg('');
+  const ar = navigator.xr && await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+  const vr = navigator.xr && await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
+  $('#ar').disabled = !ar; $('#vr').disabled = !vr;
+  if (!ar && !vr) msg('この端末ではARやVRに入れません。画面のプレビューだけ使えます（Quest 3 のブラウザで開いてください）。');
+}).catch((e) => msg('読み込みに失敗しました: ' + e));
+
+function setVariant(v) {
+  state.v = v;
+  for (const k in models) models[k].visible = k === v;
+  document.querySelectorAll('#vars button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+  drawHud();
+}
+document.querySelectorAll('#vars button').forEach((b) => b.onclick = () => setVariant(b.dataset.v));
+document.querySelectorAll('#starts button').forEach((b) => b.onclick = () => {
+  state.start = b.dataset.s;
+  document.querySelectorAll('#starts button').forEach((x) => x.classList.toggle('on', x === b));
+});
+$('#hide').onclick = () => { $('#ui').style.display = 'none'; $('#show').style.display = 'block'; };
+$('#show').onclick = () => { $('#ui').style.display = ''; $('#show').style.display = 'none'; };
+
+// ---- 置き方の計算 ----
+// 向き v の「方位角」。-Z（正面）を 0 とし、rig.rotation.y と同じ回り方で増える
+const heading = (v) => Math.atan2(-v.x, -v.z);
+const rotY = (v, a) => new THREE.Vector3(v.x * Math.cos(a) + v.z * Math.sin(a), v.y, -v.x * Math.sin(a) + v.z * Math.cos(a));
+
+function headPose() {
+  const cam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
+  const pos = new THREE.Vector3(); cam.getWorldPosition(pos);
+  const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd); fwd.y = 0;
+  if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+  return { pos, fwd: fwd.normalize() };
+}
+// モデル上の点 p が自分の足元に、モデル上の向き d が自分の正面に来るように置く
+function placeAtHead(p, d, baseY) {
+  const { pos, fwd } = headPose();
+  const a = heading(fwd) - heading(d);
+  rig.rotation.set(0, a, 0);
+  const rp = rotY(p, a);
+  rig.position.set(pos.x - rp.x, baseY, pos.z - rp.z);
+}
+const modelToWorld = (p) => rotY(p, rig.rotation.y).add(rig.position);
+
+function resetPlacement() {
+  const s = STARTS[state.start];
+  placeAtHead(s.p, s.d, s.y);
+  state.stakeMode = state.start === 'stake'; state.stakeStep = 0;
+  drawHud();
+}
+
+// ---- 手元の説明（左手） ----
+const hudCanvas = document.createElement('canvas'); hudCanvas.width = 640; hudCanvas.height = 400;
+const hudTex = new THREE.CanvasTexture(hudCanvas); hudTex.colorSpace = THREE.SRGBColorSpace;
+const hud = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.15), new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false }));
+hud.renderOrder = 999; hud.position.set(0, 0.07, -0.06); hud.rotation.x = -0.9;
+function drawHud() {
+  const c = hudCanvas.getContext('2d');
+  c.clearRect(0, 0, 640, 400);
+  c.fillStyle = 'rgba(20,22,24,0.82)'; c.beginPath(); c.roundRect(0, 0, 640, 400, 28); c.fill();
+  c.fillStyle = '#fff'; c.font = 'bold 40px sans-serif';
+  c.fillText('案 ' + VAR_NAME[state.v], 28, 60);
+  c.font = '28px sans-serif'; c.fillStyle = '#ffb27a';
+  let line2 = '家の高さ ' + (rig.position.y >= 0 ? '+' : '') + rig.position.y.toFixed(2) + ' m';
+  if (state.stakeMode) line2 = state.stakeStep === 0 ? '杭合わせ①：緑の杭（南西）の根元で右トリガー' : '杭合わせ②：黄色の杭（南東）の根元で右トリガー';
+  c.fillText(line2, 28, 108);
+  c.fillStyle = '#d9dde0'; c.font = '26px sans-serif';
+  const t = ['左スティック：歩く', '右スティック：左右＝向き／上下＝高さ', 'A：案を切替　B：はじめの位置に戻す', 'X：杭合わせ 入／切　Y：この表示を消す'];
+  t.forEach((s, i) => c.fillText(s, 28, 170 + i * 50));
+  hudTex.needsUpdate = true;
+}
+drawHud();
+
+// ---- コントローラー ----
+const ctrl = [0, 1].map((i) => { const c = renderer.xr.getController(i); scene.add(c); return c; });
+const grips = [0, 1].map((i) => { const g = renderer.xr.getControllerGrip(i); scene.add(g); return g; });
+// 握っている位置の目印（小さな球）
+grips.forEach((g) => g.add(new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffaa55 }))));
+const prevBtn = {};
+
+function onTrigger(hand) {
+  if (hand !== 'right' || !state.stakeMode) return;
+  const i = handIndex.right; if (i == null) return;
+  const p = new THREE.Vector3(); ctrl[i].getWorldPosition(p);   // コントローラーの先端
+  if (state.stakeStep === 0) {
+    // 緑の杭（SW）をこの点に。高さもこの点を地面とする
+    rig.position.y = p.y;
+    const w = modelToWorld(new THREE.Vector3(STAKE.SW.x, 0, STAKE.SW.z));
+    rig.position.x += p.x - w.x; rig.position.z += p.z - w.z;
+    state.stakeStep = 1;
+  } else {
+    // SW を軸に回して、SE の方向をこの点に向ける
+    const sw = modelToWorld(STAKE.SW.clone());
+    const cur = modelToWorld(STAKE.SE.clone()).sub(sw); cur.y = 0;
+    const want = p.clone().sub(sw); want.y = 0;
+    const da = heading(want) - heading(cur);
+    rig.rotation.y += da;
+    const swAfter = modelToWorld(STAKE.SW.clone());
+    rig.position.x += sw.x - swAfter.x; rig.position.z += sw.z - swAfter.z;
+    state.stakeStep = 0; state.stakeMode = false;
+  }
+  drawHud();
+}
+const handIndex = {};
+
+let pendingPlace = 0, last = performance.now();
+renderer.xr.addEventListener('sessionstart', () => { pendingPlace = 1; });
+renderer.xr.addEventListener('sessionend', () => {
+  scene.background = SKY; ground.visible = true;
+  rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0);
+});
+
+async function startXR(mode) {
+  try {
+    const session = await navigator.xr.requestSession(mode, { requiredFeatures: ['local-floor'], optionalFeatures: ['bounded-floor'] });
+    const isAR = mode === 'immersive-ar';
+    scene.background = isAR ? null : SKY;
+    ground.visible = !isAR;
+    await renderer.xr.setSession(session);
+  } catch (e) { msg('開始できませんでした: ' + e.message); }
+}
+$('#ar').onclick = () => startXR('immersive-ar');
+$('#vr').onclick = () => startXR('immersive-vr');
+
+const DZ = 0.2;
+renderer.setAnimationLoop((t, frame) => {
+  const now = performance.now(); const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (renderer.xr.isPresenting) {
+    if (pendingPlace && frame && ++pendingPlace > 5) { resetPlacement(); pendingPlace = 0; }   // 頭の位置が取れてから置く
+    const session = renderer.xr.getSession();
+    const sources = session ? [...session.inputSources] : [];
+    sources.forEach((src, i) => { if (src.handedness) handIndex[src.handedness] = i; });
+    // HUD を左手に付ける
+    if (handIndex.left != null && hud.parent !== grips[handIndex.left]) grips[handIndex.left].add(hud);
+    hud.visible = state.help;
+    const { pos: head, fwd } = headPose();
+    const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+    for (const src of sources) {
+      const gp = src.gamepad; if (!gp || !src.handedness) continue;
+      const h = src.handedness, ax = gp.axes[2] || 0, ay = gp.axes[3] || 0;
+      const pressed = gp.buttons.map((b) => b && b.pressed);
+      const was = prevBtn[h] || [];
+      const edge = (k) => pressed[k] && !was[k];
+      if (h === 'left') {
+        if (Math.abs(ax) > DZ || Math.abs(ay) > DZ) {
+          const mv = fwd.clone().multiplyScalar(-ay).add(right.clone().multiplyScalar(ax)).multiplyScalar(1.4 * dt);
+          rig.position.x -= mv.x; rig.position.z -= mv.z;
+        }
+        if (edge(4)) { state.stakeMode = !state.stakeMode; state.stakeStep = 0; drawHud(); }   // X
+        if (edge(5)) { state.help = !state.help; }                                           // Y
+      } else {
+        if (Math.abs(ax) > DZ) {
+          const da = ax * 0.9 * dt;    // 右に倒す＝右を向く
+          const rel = rig.position.clone().sub(head); rel.y = 0;
+          const r2 = rotY(rel, da);
+          rig.position.x = head.x + r2.x; rig.position.z = head.z + r2.z;
+          rig.rotation.y += da;
+        }
+        if (Math.abs(ay) > DZ) { rig.position.y += -ay * 0.25 * dt; drawHudThrottled(); }
+        if (edge(0)) onTrigger('right');
+        if (edge(4)) setVariant({ A: 'B', B: 'C', C: 'A' }[state.v]);                       // A
+        if (edge(5)) resetPlacement();                                                        // B
+      }
+      prevBtn[h] = pressed;
+    }
+  } else {
+    orbit.update();
+  }
+  renderer.render(scene, camera);
+});
+window._dbg = { rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
+let hudTimer = 0;
+function drawHudThrottled() { const n = performance.now(); if (n - hudTimer > 150) { hudTimer = n; drawHud(); } }
+</script>
+</body>
+</html>
