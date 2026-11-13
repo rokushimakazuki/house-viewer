@@ -27,6 +27,15 @@
   td:first-child { white-space:nowrap; color:var(--sub); }
   #hide { position:absolute; right:10px; top:10px; padding:4px 10px; font-size:13px; }
   #show { position:fixed; left:16px; top:16px; display:none; }
+  #bar { position:fixed; left:12px; right:12px; bottom:max(12px, env(safe-area-inset-bottom)); display:none;
+         background:var(--card); border:1px solid var(--line); border-radius:14px; padding:10px; backdrop-filter:blur(6px); }
+  #bar .row + .row { margin-top:8px; }
+  #bar button { padding:9px 11px; font-size:14px; }
+  #bar select { font:inherit; font-size:15px; flex:1; min-width:0; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--fg); padding:8px; }
+  #bar .mv { flex:1; font-size:18px; touch-action:none; user-select:none; -webkit-user-select:none; }
+  #vpname { position:fixed; top:max(12px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%); display:none; max-width:calc(100% - 24px);
+            background:rgba(20,22,24,.75); color:#fff; font-size:14px; padding:6px 12px; border-radius:20px; text-align:center; }
+  body.inside canvas { touch-action:none; }
 </style>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
@@ -57,6 +66,9 @@
   </div>
   <div id="msg">読み込み中…</div>
 
+  <div class="lbl">iPhone・パソコンで中から見る（ARではなく、景色は絵）</div>
+  <div class="row"><button class="go" id="inside">中から見る</button></div>
+
   <details open>
     <summary>Quest 3 での操作</summary>
     <table>
@@ -73,6 +85,20 @@
   </details>
 </div>
 <button id="show">操作パネル</button>
+<div id="vpname"></div>
+<div id="bar">
+  <div class="row">
+    <select id="vp"></select>
+    <button data-v="A" class="on">A</button><button data-v="B">B</button><button data-v="C">C</button>
+  </div>
+  <div class="row">
+    <button id="pose">座る</button>
+    <button id="gyro">傾けて見回す</button>
+    <button class="mv" id="fw">▲</button>
+    <button class="mv" id="bw">▼</button>
+    <button id="exit">戻る</button>
+  </div>
+</div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -137,16 +163,17 @@ Promise.all(['A', 'B', 'C'].map((v) => new Promise((res, rej) => loader.load(`${
   const ar = navigator.xr && await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
   const vr = navigator.xr && await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
   $('#ar').disabled = !ar; $('#vr').disabled = !vr;
-  if (!ar && !vr) msg('この端末ではARやVRに入れません。画面のプレビューだけ使えます（Quest 3 のブラウザで開いてください）。');
+  if (!ar && !vr) document.querySelector('details').open = false;
+  if (!ar && !vr) msg('この端末ではAR・VRは使えません（Quest 3 専用）。下の「中から見る」は使えます。');
 }).catch((e) => msg('読み込みに失敗しました: ' + e));
 
 function setVariant(v) {
   state.v = v;
   for (const k in models) models[k].visible = k === v;
-  document.querySelectorAll('#vars button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+  document.querySelectorAll('#vars button, #bar button[data-v]').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
   drawHud();
 }
-document.querySelectorAll('#vars button').forEach((b) => b.onclick = () => setVariant(b.dataset.v));
+document.querySelectorAll('#vars button, #bar button[data-v]').forEach((b) => b.onclick = () => setVariant(b.dataset.v));
 document.querySelectorAll('#starts button').forEach((b) => b.onclick = () => {
   state.start = b.dataset.s;
   document.querySelectorAll('#starts button').forEach((x) => x.classList.toggle('on', x === b));
@@ -297,12 +324,142 @@ renderer.setAnimationLoop((t, frame) => {
       }
       prevBtn[h] = pressed;
     }
+  } else if (inside.on) {
+    updateInside(dt);
   } else {
     orbit.update();
   }
   renderer.render(scene, camera);
 });
-window._dbg = { rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
+// ================= 中から見る（iPhone・パソコン） =================
+// p＝立つ位置（モデル座標 X,Z）、d＝最初に向く方向、pitch＝見上げる角度（度）、fl＝床の高さ
+const FLH = { '1': FL1, 'w': FL1 + 0.28, '2': FL1 + 3.00, 'g': 0 };
+const VPS = {
+  sofa:    { name: 'リビング（吹抜けの下）', p: [2.9, -0.3],  d: [0, 1],       pitch: 28,  fl: '1' },
+  dining:  { name: 'ダイニング',             p: [1.0, -1.2],  d: [2.2, 3.6],   pitch: 22,  fl: '1' },
+  kitchen: { name: 'キッチン',               p: [3.3, -2.2],  d: [-0.4, 3.8],  pitch: 15,  fl: '1' },
+  washitsu:{ name: '和室（小上がり）',       p: [-0.25, 0.5], d: [0, 1],       pitch: 8,   fl: 'w' },
+  garden:  { name: '南の庭から',             p: [0.6, 9.5],   d: [0, -1],      pitch: 12,  fl: 'g' },
+};
+const inside = { on: false, vp: 'sofa', sit: true, yaw: 0, pitch: 0, gyro: false, gyroOffset: 0, move: 0, dev: null, orient: 0, needCal: false };
+const vpSel = $('#vp');
+for (const k in VPS) { const o = document.createElement('option'); o.value = k; o.textContent = VPS[k].name; vpSel.append(o); }
+
+const seated = () => inside.sit && VPS[inside.vp].fl !== 'g';
+function eyeY() { return FLH[VPS[inside.vp].fl] + (seated() ? 1.1 : 1.55); }
+function label() { $('#vpname').textContent = VPS[inside.vp].name + '・' + (seated() ? '座った目線' : '立った目線') + '・案' + state.v; }
+function goVP(k) {
+  inside.vp = k; vpSel.value = k;
+  const v = VPS[k];
+  camera.position.set(v.p[0], eyeY(), v.p[1]);
+  inside.yaw = heading(new THREE.Vector3(v.d[0], 0, v.d[1]));
+  inside.pitch = THREE.MathUtils.degToRad(v.pitch);
+  if (inside.gyro) calibrateGyro();
+  label();
+}
+// 縦長の画面でも横に60°は見えるように画角を決める（上限100°）
+function fitFov() {
+  const a = innerWidth / innerHeight, h = THREE.MathUtils.degToRad(60);
+  const v = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(h / 2) / a));
+  camera.fov = THREE.MathUtils.clamp(v, 65, 100); camera.updateProjectionMatrix();
+}
+addEventListener('resize', () => { if (inside.on) fitFov(); });
+function enterInside() {
+  inside.on = true; document.body.classList.add('inside');
+  orbit.enabled = false;
+  rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0);
+  fitFov();
+  $('#ui').style.display = 'none'; $('#show').style.display = 'none';
+  $('#bar').style.display = 'block'; $('#vpname').style.display = 'block';
+  goVP(inside.vp);
+}
+function exitInside() {
+  inside.on = false; document.body.classList.remove('inside');
+  inside.gyro = false; $('#gyro').classList.remove('on');
+  orbit.enabled = true; camera.fov = 60; camera.updateProjectionMatrix();
+  camera.position.set(6, 9, 22); orbit.target.set(0, 2.5, 0); orbit.update();
+  $('#bar').style.display = 'none'; $('#vpname').style.display = 'none'; $('#ui').style.display = '';
+}
+$('#inside').onclick = enterInside;
+$('#exit').onclick = exitInside;
+vpSel.onchange = () => goVP(vpSel.value);
+$('#pose').onclick = () => {
+  inside.sit = !inside.sit; $('#pose').textContent = inside.sit ? '座る' : '立つ';
+  camera.position.y = eyeY(); label();
+};
+document.querySelectorAll('#bar button[data-v]').forEach((b) => b.addEventListener('click', label));
+
+// 画面をなぞって見回す
+let drag = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { if (inside.on) { drag = { x: e.clientX, y: e.clientY }; renderer.domElement.setPointerCapture(e.pointerId); } });
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (!inside.on || !drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag = { x: e.clientX, y: e.clientY };
+  if (inside.gyro) { inside.gyroOffset += dx * 0.004; return; }
+  inside.yaw += dx * 0.004; inside.pitch = THREE.MathUtils.clamp(inside.pitch + dy * 0.004, -1.4, 1.4);
+});
+const endDrag = () => { drag = null; };
+renderer.domElement.addEventListener('pointerup', endDrag);
+renderer.domElement.addEventListener('pointercancel', endDrag);
+renderer.domElement.addEventListener('wheel', (e) => { if (inside.on) { e.preventDefault(); walk(-Math.sign(e.deltaY) * 0.3); } }, { passive: false });
+
+// ▲▼ 押している間だけ進む／下がる
+for (const [id, dir] of [['#fw', 1], ['#bw', -1]]) {
+  const b = $(id);
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); inside.move = dir; });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => { inside.move = 0; });
+  b.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+function walk(dist) {
+  const f = new THREE.Vector3(); camera.getWorldDirection(f); f.y = 0;
+  if (f.lengthSq() < 1e-6) return; f.normalize();
+  camera.position.addScaledVector(f, dist);
+}
+
+// iPhone を傾けて見回す（ジャイロ）
+const zee = new THREE.Vector3(0, 0, 1), q0 = new THREE.Quaternion(), q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+const devQ = new THREE.Quaternion(), yawQ = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0);
+function deviceQuat(out) {
+  const d = inside.dev; if (!d || d.alpha == null) return false;
+  const e = new THREE.Euler(THREE.MathUtils.degToRad(d.beta), THREE.MathUtils.degToRad(d.alpha), -THREE.MathUtils.degToRad(d.gamma), 'YXZ');
+  out.setFromEuler(e); out.multiply(q1); out.multiply(q0.setFromAxisAngle(zee, -THREE.MathUtils.degToRad(inside.orient)));
+  return true;
+}
+function calibrateGyro() {
+  if (!deviceQuat(devQ)) { inside.needCal = true; return; }
+  const f = new THREE.Vector3(0, 0, -1).applyQuaternion(devQ);
+  inside.gyroOffset = inside.yaw - heading(f); inside.needCal = false;
+}
+addEventListener('deviceorientation', (e) => { inside.dev = e; if (inside.needCal) calibrateGyro(); });
+const readOrient = () => { inside.orient = (screen.orientation && screen.orientation.angle) || window.orientation || 0; };
+addEventListener('orientationchange', readOrient); readOrient();
+$('#gyro').onclick = async () => {
+  if (inside.gyro) {
+    // 切るときは今の向きを引き継ぐ
+    const f = new THREE.Vector3(); camera.getWorldDirection(f);
+    inside.yaw = heading(new THREE.Vector3(f.x, 0, f.z)); inside.pitch = Math.asin(THREE.MathUtils.clamp(f.y, -1, 1));
+    inside.gyro = false; $('#gyro').classList.remove('on'); return;
+  }
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const r = await DeviceOrientationEvent.requestPermission();
+      if (r !== 'granted') { $('#vpname').textContent = '傾きの読み取りが許可されませんでした（指でなぞって見回せます）'; return; }
+    }
+  } catch (e) { $('#vpname').textContent = '傾きを読み取れません（指でなぞって見回せます）'; return; }
+  inside.gyro = true; $('#gyro').classList.add('on'); calibrateGyro();
+};
+
+function updateInside(dt) {
+  if (inside.move) walk(inside.move * 1.0 * dt);
+  if (inside.gyro && deviceQuat(devQ)) {
+    yawQ.setFromAxisAngle(UP, inside.gyroOffset);
+    camera.quaternion.copy(yawQ).multiply(devQ);
+  } else {
+    camera.rotation.set(inside.pitch, inside.yaw, 0, 'YXZ');
+  }
+}
+
+window._dbg = { goVP, enterInside, exitInside, inside, rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
 let hudTimer = 0;
 function drawHudThrottled() { const n = performance.now(); if (n - hudTimer > 150) { hudTimer = n; drawHud(); } }
 </script>
