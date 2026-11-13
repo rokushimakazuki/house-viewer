@@ -84,9 +84,9 @@
     <span class="t">10:00</span>
   </div>
   <div class="sunrow" style="margin-top:8px">
-    <span style="font-size:13px;color:var(--sub)">土地の傾き（南へ下がる）</span>
-    <input id="slope" type="range" min="0" max="8" step="0.5" value="3">
-    <span class="t" id="slopet" style="min-width:9em">3%</span>
+    <span style="font-size:13px;color:var(--sub)">南側の隣地の低さ</span>
+    <input id="slope" type="range" min="0" max="1.5" step="0.1" value="0.5">
+    <span class="t" id="slopet" style="min-width:9em">0.5m</span>
   </div>
   <label class="chk"><input type="checkbox" id="nbrchk" checked>周りの家を出す（航空写真から読んだ概算の箱。ARでは自動で消える）</label>
   <label class="chk"><input type="checkbox" id="ao" checked>部屋の隅の陰り（iPhone・パソコンのみ。重いときは外す）</label>
@@ -346,12 +346,12 @@ const furn = new THREE.Group(); rig.add(furn);
 // ---- 周りの家（航空写真から読んだ概算。平面図 cm の四隅、2階建て想定：壁 5.8m・屋根の頂上 7.6m） ----
 // 位置・大きさは ±1〜2m 程度の目安。住所や写真は入れていない
 const NEIGHBORS = [
-  { n: '南の家',     c: [[19, 1202], [914, 1419], [761, 2098], [-80, 2015]] },
-  { n: '南の家2',    c: [[-14, 2268], [1002, 2473], [734, 3704], [-241, 3441]] },
-  { n: '南東の家',   c: [[970, 2183], [2303, 2341], [2096, 3683], [784, 3532]] },
+  { n: '南の家', south: true,     c: [[19, 1202], [914, 1419], [761, 2098], [-80, 2015]] },
+  { n: '南の家2', south: true,    c: [[-14, 2268], [1002, 2473], [734, 3704], [-241, 3441]] },
+  { n: '南東の家', south: true,   c: [[970, 2183], [2303, 2341], [2096, 3683], [784, 3532]] },
   { n: '東の家',     c: [[2457, 703], [3137, 762], [2846, 1752], [2321, 1645]] },
   { n: '北東の家',   c: [[1680, -344], [2904, -499], [2943, 354], [1685, 466]] },
-  { n: '道路向かいの家', c: [[-1211, 771], [-522, 973], [-771, 2139], [-1460, 1937]] },
+  { n: '道路向かいの家', south: true, c: [[-1211, 771], [-522, 973], [-771, 2139], [-1460, 1937]] },
 ];
 const nbr = new THREE.Group(); rig.add(nbr);
 (function buildNeighbors() {
@@ -374,19 +374,19 @@ const nbr = new THREE.Group(); rig.add(nbr);
     }
     const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); rg.computeVertexNormals();
     const roof = new THREE.Mesh(rg, roofM); roofM.side = THREE.DoubleSide;
-    const g = new THREE.Group(); g.userData.cz = cz; g.userData.name = h.n;
+    const g = new THREE.Group(); g.userData.cz = cz; g.userData.name = h.n; g.userData.south = !!h.south;
     for (const m of [wall, roof]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
     nbr.add(g);
   }
 })();
 const nbrChk = document.querySelector('#nbrchk');
 nbrChk.onchange = () => { nbr.visible = nbrChk.checked; };
-// 土地の傾き：家の中心から南へ1m離れるごとに slope% ずつ地面が下がる（北は上がる）
+// 隣地の高さ：配置図（10/31）では 南の隣地 −500、東の隣地 ±0、西の道路は北端 −150〜南端 −500。
+// 南側の家（道路向かいの南西の家も含む）をこの値だけ下げる。東・北東の家は土地と同じ高さ
 function applySlope() {
-  const sl = parseFloat($('#slope').value) / 100;
-  let south = 0;
-  for (const g of nbr.children) { g.position.y = -sl * g.userData.cz; if (g.userData.name === '南の家') south = g.position.y; }
-  $('#slopet').textContent = (sl * 100).toFixed(1).replace('.0', '') + '%（南の家は約' + Math.abs(south).toFixed(1) + 'm低い）';
+  const dh = parseFloat($('#slope').value);
+  for (const g of nbr.children) g.position.y = g.userData.south ? -dh : 0;
+  $('#slopet').textContent = dh.toFixed(1) + 'm' + (Math.abs(dh - 0.5) < 0.01 ? '（配置図の値）' : '');
 }
 $('#slope').oninput = applySlope; applySlope();
 const FURN = [
