@@ -36,6 +36,11 @@
   #vpname { position:fixed; top:max(12px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%); display:none; max-width:calc(100% - 24px);
             background:rgba(20,22,24,.75); color:#fff; font-size:14px; padding:6px 12px; border-radius:20px; text-align:center; }
   body.inside canvas { touch-action:none; }
+  .sunrow { display:flex; gap:8px; align-items:center; }
+  .sunrow select { font:inherit; font-size:14px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--fg); padding:8px; }
+  .sunrow input[type=range] { flex:1; min-width:0; accent-color:var(--accent); }
+  .sunrow .t { font-variant-numeric:tabular-nums; font-size:14px; min-width:3.2em; text-align:right; }
+  label.chk { font-size:13px; color:var(--sub); display:flex; gap:6px; align-items:center; margin-top:8px; }
 </style>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
@@ -59,6 +64,20 @@
     <button data-s="stake">杭に合わせる</button>
   </div>
 
+  <div class="lbl">日差し（平塚・真北は図面の上から右へ19°）</div>
+  <div class="sunrow">
+    <select class="season">
+      <option value="12-22">冬至（12/22）</option>
+      <option value="3-20" selected>春分（3/20）</option>
+      <option value="6-21">夏至（6/21）</option>
+      <option value="9-23">秋分（9/23）</option>
+      <option value="today">今日</option>
+    </select>
+    <input class="hour" type="range" min="6" max="18" step="0.25" value="10">
+    <span class="t">10:00</span>
+  </div>
+  <label class="chk"><input type="checkbox" id="ao" checked>部屋の隅の陰り（iPhone・パソコンのみ。重いときは外す）</label>
+
   <div class="lbl">見る</div>
   <div class="row">
     <button class="go" id="ar" disabled>ARで見る</button>
@@ -80,9 +99,12 @@
       <tr><td>X ボタン</td><td>杭合わせモード 入／切</td></tr>
       <tr><td>右トリガー</td><td>（杭合わせ中）①緑の杭（南西）の根元で押す → ②黄色の杭（南東）の根元で押す</td></tr>
       <tr><td>Y ボタン</td><td>手元の説明を出す／消す</td></tr>
+      <tr><td>右スティック 押し込み</td><td>日差しの時刻を1時間進める</td></tr>
+      <tr><td>左スティック 押し込み</td><td>季節を切り替える（冬至→春分→夏至→秋分）</td></tr>
     </table>
     <p class="sub" style="margin-top:8px">AR＝周りの景色の中に家が出る。VR＝周りは見えず、家と芝生だけ。家の中を見るときは、1階の床が足元に来るように置きます。</p>
   </details>
+  <p class="sub" style="margin:10px 0 0">素材：Poly Haven（CC0）。日差しは計算上の目安で、周りの建物や木の影は入っていません。</p>
 </div>
 <button id="show">操作パネル</button>
 <div id="vpname"></div>
@@ -98,13 +120,28 @@
     <button class="mv" id="bw">▼</button>
     <button id="exit">戻る</button>
   </div>
+  <div class="row"><div class="sunrow">
+    <select class="season">
+      <option value="12-22">冬至（12/22）</option>
+      <option value="3-20" selected>春分（3/20）</option>
+      <option value="6-21">夏至（6/21）</option>
+      <option value="9-23">秋分（9/23）</option>
+      <option value="today">今日</option>
+    </select>
+    <input class="hour" type="range" min="6" max="18" step="0.25" value="10">
+    <span class="t">10:00</span>
+  </div></div>
 </div>
 
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 // ---- モデル座標（m）。X=東、Z=南、Y=地面からの高さ。1階床は地面+0.59 ----
 const FL1 = 0.59;
@@ -126,40 +163,209 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-const SKY = new THREE.Color(0xc9d6de);
-scene.background = SKY;
-scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
-scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a7a, 1.4));
-const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(-5, 10, 8); scene.add(sun);
+let skyBg = new THREE.Color(0xc9d6de);
+scene.background = skyBg;
+const pmrem = new THREE.PMREMGenerator(renderer);
 
-const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 48), new THREE.MeshStandardMaterial({ color: 0x8f9a86, roughness: 1 }));
-ground.rotation.x = -Math.PI / 2; ground.position.y = -0.002; scene.add(ground);
+// ---- 光：空からの光（半球光＋空の写真）と太陽（影を落とす） ----
+const hemi = new THREE.HemisphereLight(0xfff4e6, 0x8a7a66, 0.45); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 2.8);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -13, right: 13, top: 13, bottom: -13, near: 1, far: 80 });
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+const sunTarget = new THREE.Object3D(); scene.add(sunTarget); sun.target = sunTarget;
+scene.add(sun);
+
+new RGBELoader().load('assets/sky/sky_1k.hdr', (t) => {
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  scene.environment = pmrem.fromEquirectangular(t).texture;
+  skyBg = t;
+  if (!(renderer.xr.isPresenting && renderer.xr.getSession()?.environmentBlendMode !== 'opaque')) scene.background = skyBg;
+});
+
+// ---- 素材（Poly Haven, CC0） ----
+const tl = new THREE.TextureLoader();
+const texCache = {};
+function tex(name, srgb, rep) {
+  const key = name + '@' + rep;
+  if (!texCache[key]) {
+    const t = tl.load('assets/tex/' + name + '.jpg');
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 8;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    texCache[key] = t;
+  }
+  return texCache[key];
+}
+// rep＝（元データの模様1枚分の長さ m）÷（写真1枚が表す長さ m）
+const LOOK = {
+  floor:    { tex: 'oak_wood_planks',       rep: 1.2 / 1.2 },
+  wall:     { nor: 'white_plaster_02',      rep: 1.0, color: 0xeeebe5, ns: 0.35, roughness: 0.92 },
+  ceiling:  { nor: 'white_plaster_02',      rep: 1.0, color: 0xf6f4f0, ns: 0.2,  roughness: 0.95 },
+  tatami:   { tex: 'tatami_mat',            rep: 1.82 / 1.8 },
+  accent:   { tex: 'japanese_cedar_planks', rep: 0.6 / 1.13, color: 0xd8c6b4 },
+  woodceil: { tex: 'japanese_cedar_planks', rep: 0.6 / 1.13, color: 0xd8c6b4 },
+  table:    { tex: 'oak_wood_planks',       rep: 1.0 / 1.2, color: 0xd9c2a8 },
+};
+const NO_SHADOW = ['glass', 'lotline', 'north', 'stakecap'];
+function prepModel(root) {
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const m = o.material, n = m.name;
+    o.castShadow = !NO_SHADOW.includes(n); o.receiveShadow = true;
+    if (n === 'glass') { m.transparent = true; m.depthWrite = false; }
+    m.envMapIntensity = 0.45;
+    const L = LOOK[n];
+    if (L) {
+      if (L.tex) {
+        m.map = tex(L.tex + '_diff', true, L.rep); m.normalMap = tex(L.tex + '_nor', false, L.rep);
+        m.roughnessMap = tex(L.tex + '_rough', false, L.rep); m.roughness = 1;
+      }
+      if (L.nor) { m.map = null; m.normalMap = tex(L.nor + '_nor', false, L.rep); m.normalScale.set(L.ns, L.ns); m.roughness = L.roughness; }
+      m.color.set(L.color ?? 0xffffff);
+      m.needsUpdate = true;
+    }
+  });
+}
+
+const groundMat = new THREE.MeshStandardMaterial({ map: tex('grass_ground_diff', true, 48), normalMap: tex('grass_ground_nor', false, 48), roughness: 1, color: 0xb8d0a0 });
+const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 64), groundMat);
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.002; ground.receiveShadow = true; scene.add(ground);
+
+// ---- 太陽の位置（平塚：北緯35.33°、東経139.35°、日本時間） ----
+const LAT = 35.33, LON = 139.35, TZ = 9, NORTH_DEG = 19;   // 真北は図面の上から時計回りに19°
+const SEASONS = ['12-22', '3-20', '6-21', '9-23'];
+const SEASON_NAME = { '12-22': '冬至', '3-20': '春分', '6-21': '夏至', '9-23': '秋分', today: '今日' };
+const sunState = { season: '3-20', hour: 10, alt: 0 };
+const sunModelDir = new THREE.Vector3(0, 1, 0);
+function sunAngles(month, day, hour) {
+  const N = Math.round((Date.UTC(2027, month - 1, day) - Date.UTC(2027, 0, 1)) / 864e5) + 1;
+  const g = 2 * Math.PI / 365 * (N - 1 + (hour - 12) / 24);
+  const eqt = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+  const decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  const tst = hour * 60 + eqt + 4 * LON - 60 * TZ;          // 真太陽時（分）
+  const ha = THREE.MathUtils.degToRad(tst / 4 - 180);         // 時角
+  const lat = THREE.MathUtils.degToRad(LAT);
+  const alt = Math.asin(Math.sin(lat) * Math.sin(decl) + Math.cos(lat) * Math.cos(decl) * Math.cos(ha));
+  const az = Math.atan2(Math.sin(ha), Math.cos(ha) * Math.sin(lat) - Math.tan(decl) * Math.cos(lat)) + Math.PI;   // 北から時計回り
+  return { alt, az };
+}
+function seasonMD() {
+  if (sunState.season === 'today') { const d = new Date(); return [d.getMonth() + 1, d.getDate()]; }
+  return sunState.season.split('-').map(Number);
+}
+const WARM = new THREE.Color(0xffb070), WHITE = new THREE.Color(0xfff6ea);
+function applySun() {
+  const [m, d] = seasonMD();
+  const { alt, az } = sunAngles(m, d, sunState.hour);
+  const b = THREE.MathUtils.degToRad(NORTH_DEG) + az;
+  sunModelDir.set(Math.sin(b) * Math.cos(alt), Math.sin(alt), -Math.cos(b) * Math.cos(alt));
+  sunState.alt = alt;
+  const up = alt > 0.01, k = Math.min(1, Math.sin(Math.max(alt, 0)) * 2.5);
+  sun.visible = up;
+  sun.intensity = 4.5 * Math.min(1, 0.35 + k);
+  sun.color.copy(WARM).lerp(WHITE, k);
+  hemi.intensity = up ? 0.7 + 0.3 * k : 0.2;
+  syncSunUI();
+}
+function sunLabel() {
+  const h = Math.floor(sunState.hour), mi = Math.round((sunState.hour - h) * 60);
+  const altDeg = THREE.MathUtils.radToDeg(sunState.alt);
+  return SEASON_NAME[sunState.season] + ' ' + h + ':' + String(mi).padStart(2, '0') + (altDeg > 0 ? '（太陽の高さ ' + altDeg.toFixed(0) + '°）' : '（日の出前・日没後）');
+}
+function syncSunUI() {
+  document.querySelectorAll('select.season').forEach((e) => { e.value = sunState.season; });
+  document.querySelectorAll('input.hour').forEach((e) => { e.value = sunState.hour; });
+  const h = Math.floor(sunState.hour), mi = Math.round((sunState.hour - h) * 60);
+  document.querySelectorAll('.sunrow .t').forEach((e) => { e.textContent = h + ':' + String(mi).padStart(2, '0'); });
+}
+function setHour(h) { sunState.hour = h; applySun(); }
+function nextSeason() { const i = SEASONS.indexOf(sunState.season); sunState.season = SEASONS[(i + 1) % SEASONS.length]; applySun(); }
+document.querySelectorAll('select.season').forEach((e) => e.addEventListener('change', () => { sunState.season = e.value; applySun(); if (typeof label === 'function' && inside.on) label(); }));
+document.querySelectorAll('input.hour').forEach((e) => e.addEventListener('input', () => setHour(parseFloat(e.value))));
+applySun();
+// 毎フレーム：家が動いても太陽の向きは家（＝真北）に対して決まる。影の範囲は家の中心に合わせる
+const _sw = new THREE.Vector3();
+function placeSun() {
+  const a = rig.rotation.y, v = sunModelDir;
+  _sw.set(v.x * Math.cos(a) + v.z * Math.sin(a), v.y, -v.x * Math.sin(a) + v.z * Math.cos(a));
+  sunTarget.position.set(rig.position.x, rig.position.y + 2.5, rig.position.z);
+  sun.position.copy(sunTarget.position).addScaledVector(_sw, 40);
+}
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 300);
 camera.position.set(6, 9, 22);
 const orbit = new OrbitControls(camera, renderer.domElement);
 orbit.target.set(0, 2.5, 0); orbit.update();
 
+// ---- 部屋の隅の陰り（画面処理。AR・VR中は使えない） ----
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+composer.addPass(new RenderPass(scene, camera));
+const gtao = new GTAOPass(scene, camera, innerWidth, innerHeight);
+gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.0, scale: 1.0, samples: 16 });
+gtao.blendIntensity = 1.0;
+composer.addPass(gtao);
+composer.addPass(new OutputPass());
+let aoOn = !/iPhone|iPad|Android/.test(navigator.userAgent);
+$('#ao').checked = aoOn;
+$('#ao').onchange = () => { aoOn = $('#ao').checked; };
+
 const rig = new THREE.Group(); scene.add(rig);   // 家全体。位置と向きはここで動かす
 const models = {};
+
+// ---- 家具（Poly Haven, CC0）。平面図 cm と向き（ラジアン、Sweet Home 3D の値） ----
+const furn = new THREE.Group(); rig.add(furn);
+const FURN = [
+  ['sofa_02', 656, 507, 4.712389],
+  ['modern_coffee_table_01', 771, 464, 4.712389],
+  ['potted_plant_02', 918, 598, 0],
+  ['dining_chair_02', 507.5, 148, 0], ['dining_chair_02', 557.5, 148, 0], ['dining_chair_02', 607.5, 148, 0],
+  ['dining_chair_02', 507.5, 278, Math.PI], ['dining_chair_02', 557.5, 278, Math.PI], ['dining_chair_02', 607.5, 278, Math.PI],
+];
+const FURN_ROT = { sofa_02: 0, modern_coffee_table_01: 0, potted_plant_02: 0, dining_chair_02: 0 };   // 素材ごとの正面の向きの補正
+function loadFurniture() {
+  const ids = [...new Set(FURN.map((f) => f[0]))];
+  const gl = new GLTFLoader();
+  return Promise.all(ids.map((id) => new Promise((res) => gl.load(`assets/models/${id}/${id}.gltf`, (g) => res([id, g.scene]), undefined, () => res([id, null])))))
+    .then((list) => {
+      const src = Object.fromEntries(list);
+      for (const [id, x, y, a] of FURN) {
+        if (!src[id]) continue;
+        const o = src[id].clone(true);
+        o.position.set((x - 477.75) / 100, FL1, (y - 409.5) / 100);
+        o.rotation.y = -a + FURN_ROT[id];
+        o.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; m.material.envMapIntensity = 0.45; } });
+        furn.add(o);
+      }
+      // 箱で作っていた椅子とローテーブルは隠す
+      if (src.dining_chair_02 && src.modern_coffee_table_01)
+        for (const k in models) models[k].traverse((m) => { if (m.isMesh && ['chair', 'lowtable'].includes(m.material.name)) m.visible = false; });
+    });
+}
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
 });
 
 // ---- 読み込み ----
 const loader = new GLTFLoader();
 Promise.all(['A', 'B', 'C'].map((v) => new Promise((res, rej) => loader.load(`${v}.glb`, (g) => {
-  g.scene.traverse((o) => { if (o.isMesh && o.material && o.material.name === 'glass') { o.material.transparent = true; o.material.depthWrite = false; } });
+  prepModel(g.scene);
   models[v] = g.scene; g.scene.visible = v === state.v; rig.add(g.scene); res();
 }, undefined, rej)))).then(async () => {
   msg('');
+  loadFurniture();
   const ar = navigator.xr && await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
   const vr = navigator.xr && await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
   $('#ar').disabled = !ar; $('#vr').disabled = !vr;
@@ -226,8 +432,10 @@ function drawHud() {
   if (state.stakeMode) line2 = state.stakeStep === 0 ? '杭合わせ①：緑の杭（南西）の根元で右トリガー' : '杭合わせ②：黄色の杭（南東）の根元で右トリガー';
   c.fillText(line2, 28, 108);
   c.fillStyle = '#d9dde0'; c.font = '26px sans-serif';
-  const t = ['左スティック：歩く', '右スティック：左右＝向き／上下＝高さ', 'A：案を切替　B：はじめの位置に戻す', 'X：杭合わせ 入／切　Y：この表示を消す'];
-  t.forEach((s, i) => c.fillText(s, 28, 170 + i * 50));
+  c.fillStyle = '#ffe08a'; c.fillText('日差し ' + sunLabel(), 28, 150);
+  c.fillStyle = '#d9dde0'; c.font = '24px sans-serif';
+  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝高さ（押し込み＝+1時間）', 'A：案を切替　B：はじめの位置に戻す', 'X：杭合わせ 入／切　Y：この表示を消す'];
+  t.forEach((s, i) => c.fillText(s, 28, 200 + i * 48));
   hudTex.needsUpdate = true;
 }
 drawHud();
@@ -267,7 +475,7 @@ const handIndex = {};
 let pendingPlace = 0, last = performance.now();
 renderer.xr.addEventListener('sessionstart', () => { pendingPlace = 1; });
 renderer.xr.addEventListener('sessionend', () => {
-  scene.background = SKY; ground.visible = true;
+  scene.background = skyBg; ground.visible = true;
   rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0);
 });
 
@@ -275,7 +483,7 @@ async function startXR(mode) {
   try {
     const session = await navigator.xr.requestSession(mode, { requiredFeatures: ['local-floor'], optionalFeatures: ['bounded-floor'] });
     const isAR = mode === 'immersive-ar';
-    scene.background = isAR ? null : SKY;
+    scene.background = isAR ? null : skyBg;
     ground.visible = !isAR;
     await renderer.xr.setSession(session);
   } catch (e) { msg('開始できませんでした: ' + e.message); }
@@ -286,6 +494,7 @@ $('#vr').onclick = () => startXR('immersive-vr');
 const DZ = 0.2;
 renderer.setAnimationLoop((t, frame) => {
   const now = performance.now(); const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  placeSun();
   if (renderer.xr.isPresenting) {
     if (pendingPlace && frame && ++pendingPlace > 5) { resetPlacement(); pendingPlace = 0; }   // 頭の位置が取れてから置く
     const session = renderer.xr.getSession();
@@ -309,6 +518,7 @@ renderer.setAnimationLoop((t, frame) => {
         }
         if (edge(4)) { state.stakeMode = !state.stakeMode; state.stakeStep = 0; drawHud(); }   // X
         if (edge(5)) { state.help = !state.help; }                                           // Y
+        if (edge(3)) { nextSeason(); drawHud(); }                                             // 左スティック押し込み
       } else {
         if (Math.abs(ax) > DZ) {
           const da = ax * 0.9 * dt;    // 右に倒す＝右を向く
@@ -321,6 +531,7 @@ renderer.setAnimationLoop((t, frame) => {
         if (edge(0)) onTrigger('right');
         if (edge(4)) setVariant({ A: 'B', B: 'C', C: 'A' }[state.v]);                       // A
         if (edge(5)) resetPlacement();                                                        // B
+        if (edge(3)) { setHour(sunState.hour >= 17 ? 7 : Math.floor(sunState.hour) + 1); drawHud(); }   // 右スティック押し込み
       }
       prevBtn[h] = pressed;
     }
@@ -329,7 +540,7 @@ renderer.setAnimationLoop((t, frame) => {
   } else {
     orbit.update();
   }
-  renderer.render(scene, camera);
+  if (!renderer.xr.isPresenting && aoOn) composer.render(); else renderer.render(scene, camera);
 });
 // ================= 中から見る（iPhone・パソコン） =================
 // p＝立つ位置（モデル座標 X,Z）、d＝最初に向く方向、pitch＝見上げる角度（度）、fl＝床の高さ
@@ -459,7 +670,7 @@ function updateInside(dt) {
   }
 }
 
-window._dbg = { goVP, enterInside, exitInside, inside, rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
+window._dbg = { goVP, sunState, setHour, applySun, placeSun, composer, furn, enterInside, exitInside, inside, rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
 let hudTimer = 0;
 function drawHudThrottled() { const n = performance.now(); if (n - hudTimer > 150) { hudTimer = n; drawHud(); } }
 </script>
