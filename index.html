@@ -153,6 +153,7 @@
   <div class="row">
     <select id="vp"></select>
     <button data-v="A" class="on">A</button><button data-v="B">B</button><button data-v="C">C</button>
+    <button id="wide" title="画角を切り替える">標準</button>
   </div>
   <div class="row">
     <span style="font-size:13px;color:var(--sub);align-self:center">リビングの窓</span>
@@ -786,12 +787,24 @@ function goVP(k) {
   if (inside.gyro) calibrateGyro();
   label(); updateSee();
 }
-// 縦長の画面でも横に60°は見えるように画角を決める（上限100°）
+// 縦長の画面でも横に決めた角度が見えるように画角を決める（縦の上限あり）
+// 標準＝横60°（人の目で見た感じに近い）／広角＝横90°（スマホの1倍カメラより広い）／超広角＝横110°（スマホの0.5倍カメラ相当）
+const WIDE = [
+  { name: '標準', h: 60, min: 65, max: 100 },
+  { name: '広角', h: 90, min: 40, max: 125 },
+  { name: '超広角', h: 110, min: 40, max: 135 },
+];
+inside.wide = 0;
 function fitFov() {
-  const a = innerWidth / innerHeight, h = THREE.MathUtils.degToRad(60);
+  const w = WIDE[inside.wide], a = innerWidth / innerHeight, h = THREE.MathUtils.degToRad(w.h);
   const v = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(h / 2) / a));
-  camera.fov = THREE.MathUtils.clamp(v, 65, 100); camera.updateProjectionMatrix();
+  camera.fov = THREE.MathUtils.clamp(v, w.min, w.max); camera.updateProjectionMatrix();
 }
+$('#wide').onclick = () => {
+  inside.wide = (inside.wide + 1) % WIDE.length;
+  const b = $('#wide'); b.textContent = WIDE[inside.wide].name; b.classList.toggle('on', inside.wide > 0);
+  fitFov();
+};
 addEventListener('resize', () => { if (inside.on) fitFov(); });
 function enterInside() {
   inside.on = true; document.body.classList.add('inside');
