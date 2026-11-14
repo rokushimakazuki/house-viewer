@@ -41,8 +41,19 @@
   .sunrow input[type=range] { flex:1; min-width:0; accent-color:var(--accent); }
   .sunrow .t { font-variant-numeric:tabular-nums; font-size:14px; min-width:3.2em; text-align:right; }
   label.chk { font-size:13px; color:var(--sub); display:flex; gap:6px; align-items:center; margin-top:8px; }
+  .sunrow button.play { padding:6px 10px; font-size:14px; }
+  .sunarea { font-size:13px; color:var(--accent); margin-top:6px; min-height:1em; font-variant-numeric:tabular-nums; }
+  table.num td { text-align:right; font-variant-numeric:tabular-nums; }
+  table.num td:first-child, table.num th:first-child { text-align:left; }
+  table.num th { font-weight:600; font-size:12px; color:var(--sub); text-align:right; padding:4px; }
+  table.num td.best { color:var(--accent); font-weight:700; }
+  #seeinfo { font-size:13px; margin-top:8px; display:none; line-height:1.5; }
+  #sheetbox { position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; z-index:10; overflow:auto; padding:16px; box-sizing:border-box; }
+  #sheetbox img { display:block; max-width:100%; margin:0 auto 12px; border-radius:8px; }
+  #sheetbox .row { justify-content:center; }
+  #sheetbox a, #sheetbox button { background:#fff; color:#22262a; text-decoration:none; border-radius:10px; padding:10px 16px; font-weight:600; border:0; }
 </style>
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","three-mesh-bvh":"https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.6/build/index.module.js"}}</script>
 </head>
 <body>
 <div id="ui">
@@ -83,13 +94,18 @@
     </select>
     <input class="hour" type="range" min="6" max="18" step="0.25" value="10">
     <span class="t">10:00</span>
+    <button class="play" title="1日を早送り">▶</button>
   </div>
+  <div class="sunarea"></div>
   <div class="sunrow" style="margin-top:8px">
     <span style="font-size:13px;color:var(--sub)">南側の隣地の低さ</span>
     <input id="slope" type="range" min="0" max="1.5" step="0.1" value="0.5">
     <span class="t" id="slopet" style="min-width:9em">0.5m</span>
   </div>
-  <label class="chk"><input type="checkbox" id="nbrchk" checked>周りの家を出す（航空写真から読んだ概算の箱。ARでは自動で消える）</label>
+  <label class="chk"><input type="checkbox" id="nbrchk" checked>周りの家を出す（位置は航空写真から読んだ概算、窓と色は想像。ARでは消える）</label>
+  <label class="chk"><input type="checkbox" id="sitechk" checked>外まわりを出す（道路・駐車場・フェンス・木・車。ARでは消える）</label>
+  <label class="chk"><input type="checkbox" id="night">夜にする（照明をつける）</label>
+  <label class="chk"><input type="checkbox" id="curt">リビングのカーテンを閉める</label>
   <label class="chk"><input type="checkbox" id="ao" checked>部屋の隅の陰り（iPhone・パソコンのみ。重いときは外す）</label>
 
   <div class="lbl">見る</div>
@@ -101,6 +117,14 @@
 
   <div class="lbl">iPhone・パソコンで中から見る（ARではなく、景色は絵）</div>
   <div class="row"><button class="go" id="inside">中から見る</button></div>
+
+  <div class="lbl">数字で比べる</div>
+  <div class="row"><button id="daytbl">冬至の日だまり 9通り</button></div>
+  <div id="daytblout" style="font-size:13px"></div>
+  <div class="row" style="margin-top:8px">
+    <select id="sheetvp" style="font:inherit;font-size:14px;flex:1;min-width:0;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--fg);padding:8px"></select>
+    <button id="sheet">9通りを並べた画像</button>
+  </div>
 
   <details open>
     <summary>Quest 3 での操作</summary>
@@ -116,10 +140,12 @@
       <tr><td>左グリップ（中指）</td><td>リビングの窓の高さを切り替え 2.0→2.2→2.4m</td></tr>
       <tr><td>右スティック 押し込み</td><td>日差しの時刻を1時間進める</td></tr>
       <tr><td>左スティック 押し込み</td><td>季節を切り替える（冬至→春分→夏至→秋分）</td></tr>
+      <tr><td>右トリガー</td><td>（ふだん）メジャー：1回目＝始点、2回目＝終点で長さを表示、3回目＝消す</td></tr>
+      <tr><td>右グリップ（中指）</td><td>押して狙い、離すとそこへ移動（指した面が足元に来る）</td></tr>
     </table>
     <p class="sub" style="margin-top:8px">AR＝周りの景色の中に家が出る。VR＝周りは見えず、家と芝生だけ。家の中を見るときは、1階の床が足元に来るように置きます。</p>
   </details>
-  <p class="sub" style="margin:10px 0 0">素材：Poly Haven（CC0）。日差しは計算上の目安で、周りの建物や木の影は入っていません。</p>
+  <p class="sub" style="margin:10px 0 0">素材：Poly Haven（CC0）。日差しは計算上の目安。周りの家の位置・大きさは ±1〜2m の概算で、窓の位置と色は想像です。南側の段差の留め方（擁壁）・駐車場の勾配も推測です。「中から見る」で外の立ち位置を選ぶと出る％は、吹抜けの下のリビングを25cm間隔の点で調べ、そこから遮られずに見える点の割合です。</p>
 </div>
 <button id="show">操作パネル</button>
 <div id="vpname"></div>
@@ -149,8 +175,12 @@
     </select>
     <input class="hour" type="range" min="6" max="18" step="0.25" value="10">
     <span class="t">10:00</span>
+    <button class="play" title="1日を早送り">▶</button>
   </div></div>
+  <div class="sunarea"></div>
+  <div id="seeinfo"></div>
 </div>
+<div id="sheetbox"><img id="sheetimg" alt=""><div class="row"><a id="sheetdl" download="比較.jpg">画像を保存</a><button id="sheetclose">閉じる</button></div></div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -161,6 +191,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { initExtras } from './extras.js';
+let ext = null;   // 追加機能（extras.js）
 
 // ---- モデル座標（m）。X=東、Z=南、Y=地面からの高さ。1階床は地面+0.59 ----
 const FL1 = 0.59;
@@ -204,11 +236,19 @@ sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
 const sunTarget = new THREE.Object3D(); scene.add(sunTarget); sun.target = sunTarget;
 scene.add(sun);
 
+let envTex = null;
+const NIGHT_BG = new THREE.Color(0x0c1220);
+const isPassthrough = () => renderer.xr.isPresenting && renderer.xr.getSession()?.environmentBlendMode !== 'opaque';
+function applyBackground() {
+  const night = ext && ext.isNight();
+  scene.environment = night ? null : envTex;
+  if (!isPassthrough()) scene.background = night ? NIGHT_BG : skyBg;
+}
 new RGBELoader().load('assets/sky/sky_1k.hdr', (t) => {
   t.mapping = THREE.EquirectangularReflectionMapping;
-  scene.environment = pmrem.fromEquirectangular(t).texture;
+  envTex = pmrem.fromEquirectangular(t).texture;
   skyBg = t;
-  if (!(renderer.xr.isPresenting && renderer.xr.getSession()?.environmentBlendMode !== 'opaque')) scene.background = skyBg;
+  applyBackground();
 });
 
 // ---- 素材（Poly Haven, CC0） ----
@@ -282,18 +322,40 @@ function seasonMD() {
   return sunState.season.split('-').map(Number);
 }
 const WARM = new THREE.Color(0xffb070), WHITE = new THREE.Color(0xfff6ea);
+function sunDir(m, d, hour, out = new THREE.Vector3()) {
+  const { alt, az } = sunAngles(m, d, hour);
+  const b = THREE.MathUtils.degToRad(NORTH_DEG) + az;
+  out.set(Math.sin(b) * Math.cos(alt), Math.sin(alt), -Math.cos(b) * Math.cos(alt));
+  return out;
+}
 function applySun() {
   const [m, d] = seasonMD();
-  const { alt, az } = sunAngles(m, d, sunState.hour);
-  const b = THREE.MathUtils.degToRad(NORTH_DEG) + az;
-  sunModelDir.set(Math.sin(b) * Math.cos(alt), Math.sin(alt), -Math.cos(b) * Math.cos(alt));
+  sunDir(m, d, sunState.hour, sunModelDir);
+  const alt = Math.asin(sunModelDir.y);
   sunState.alt = alt;
   const up = alt > 0.01, k = Math.min(1, Math.sin(Math.max(alt, 0)) * 2.5);
   sun.visible = up;
   sun.intensity = 4.5 * Math.min(1, 0.35 + k);
   sun.color.copy(WARM).lerp(WHITE, k);
   hemi.intensity = up ? 0.7 + 0.3 * k : 0.2;
+  if (ext && ext.isNight()) {
+    sun.visible = false; hemi.intensity = 0.06; hemi.color.set(0x8899bb); hemi.groundColor.set(0x0c0f14);
+  } else { hemi.color.set(0xfff4e6); hemi.groundColor.set(0x8a7a66); }
   syncSunUI();
+  scheduleSunArea();
+}
+// 日の当たる床の面積（少し待ってから計算。スライダーを動かしている間は重くしない）
+let sunAreaTimer = 0;
+function scheduleSunArea() {
+  clearTimeout(sunAreaTimer);
+  sunAreaTimer = setTimeout(() => {
+    if (!ext || renderer.xr.isPresenting) return;
+    const el = document.querySelectorAll('.sunarea');
+    if (ext.isNight() || sunState.alt <= 0.01) { el.forEach((e) => { e.textContent = ''; }); return; }
+    const k = curKey(); if (!models[k]) return;
+    const a = ext.sunArea(k, sunModelDir);
+    el.forEach((e) => { e.textContent = '日の当たる床（LDK＋和室）約 ' + a.toFixed(1) + '㎡　' + SEASON_NAME[sunState.season] + ' ' + document.querySelector('.sunrow .t').textContent; });
+  }, 120);
 }
 function sunLabel() {
   const h = Math.floor(sunState.hour), mi = Math.round((sunState.hour - h) * 60);
@@ -310,6 +372,14 @@ function setHour(h) { sunState.hour = h; applySun(); }
 function nextSeason() { const i = SEASONS.indexOf(sunState.season); sunState.season = SEASONS[(i + 1) % SEASONS.length]; applySun(); }
 document.querySelectorAll('select.season').forEach((e) => e.addEventListener('change', () => { sunState.season = e.value; applySun(); if (typeof label === 'function' && inside.on) label(); }));
 document.querySelectorAll('input.hour').forEach((e) => e.addEventListener('input', () => setHour(parseFloat(e.value))));
+let playTimer = 0;
+function stopPlay() { clearInterval(playTimer); playTimer = 0; document.querySelectorAll('button.play').forEach((b) => { b.textContent = '▶'; }); }
+document.querySelectorAll('button.play').forEach((b) => b.onclick = () => {
+  if (playTimer) { stopPlay(); return; }
+  if (sunState.hour >= 17.75) setHour(6);
+  document.querySelectorAll('button.play').forEach((x) => { x.textContent = '■'; });
+  playTimer = setInterval(() => { const h = Math.round((sunState.hour + 0.05) * 100) / 100; if (h > 18) { stopPlay(); return; } setHour(h); if (typeof drawHud === 'function') drawHudThrottled(); }, 50);   // 1時間＝1秒
+});
 applySun();
 // 毎フレーム：家が動いても太陽の向きは家（＝真北）に対して決まる。影の範囲は家の中心に合わせる
 const _sw = new THREE.Vector3();
@@ -339,6 +409,7 @@ $('#ao').checked = aoOn;
 $('#ao').onchange = () => { aoOn = $('#ao').checked; };
 
 const rig = new THREE.Group(); scene.add(rig);   // 家全体。位置と向きはここで動かす
+rig.add(ground);
 const models = {};
 
 // ---- 家具（Poly Haven, CC0）。平面図 cm と向き（ラジアン、Sweet Home 3D の値） ----
@@ -355,31 +426,12 @@ const NEIGHBORS = [
   { n: '道路向かいの家', south: true, c: [[-1211, 771], [-522, 973], [-771, 2139], [-1460, 1937]] },
 ];
 const nbr = new THREE.Group(); rig.add(nbr);
-(function buildNeighbors() {
-  const wallM = new THREE.MeshStandardMaterial({ color: 0xd8d0c2, roughness: 0.9 });
-  const roofM = new THREE.MeshStandardMaterial({ color: 0x4d5258, roughness: 0.8 });
-  const EAVE = 5.8, RIDGE = 7.6;
-  for (const h of NEIGHBORS) {
-    const pts = h.c.map(([x, y]) => new THREE.Vector2((x - 477.75) / 100, (y - 409.5) / 100));
-    // 壁：四角柱（Shape を XZ に置いて上へ押し出す）
-    const shape = new THREE.Shape(pts.map((q) => new THREE.Vector2(q.x, -q.y)));
-    const wg = new THREE.ExtrudeGeometry(shape, { depth: EAVE + 3, bevelEnabled: false });
-    wg.rotateX(-Math.PI / 2); wg.translate(0, -3, 0);   // 地面の高さを変えても浮かないよう、下に3m伸ばしておく
-    const wall = new THREE.Mesh(wg, wallM);
-    // 屋根：重心を頂点にした四角すい（寄棟の代わり）
-    const cx = pts.reduce((a, q) => a + q.x, 0) / 4, cz = pts.reduce((a, q) => a + q.y, 0) / 4;
-    const pos = [];
-    for (let i = 0; i < 4; i++) {
-      const a = pts[i], b = pts[(i + 1) % 4];
-      pos.push(a.x, EAVE, a.y, cx, RIDGE, cz, b.x, EAVE, b.y);
-    }
-    const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); rg.computeVertexNormals();
-    const roof = new THREE.Mesh(rg, roofM); roofM.side = THREE.DoubleSide;
-    const g = new THREE.Group(); g.userData.cz = cz; g.userData.name = h.n; g.userData.south = !!h.south;
-    for (const m of [wall, roof]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
-    nbr.add(g);
-  }
-})();
+function renderFrame() { if (!renderer.xr.isPresenting && aoOn) composer.render(); else renderer.render(scene, camera); }
+ext = initExtras({
+  scene, rig, renderer, camera, composer, models, furn, nbr, NEIGHBORS, ground, state, tex,
+  loadModel: (k) => loadModel(k), curKey: () => curKey(), render: renderFrame,
+  onNight: () => { applyBackground(); renderer.toneMappingExposure = ext.isNight() ? 1.0 : 1.1; applySun(); },
+});
 const nbrChk = document.querySelector('#nbrchk');
 nbrChk.onchange = () => { nbr.visible = nbrChk.checked; };
 // 隣地の高さ：配置図（10/31）では 南の隣地 −500、東の隣地 ±0、西の道路は北端 −150〜南端 −500。
@@ -387,9 +439,16 @@ nbrChk.onchange = () => { nbr.visible = nbrChk.checked; };
 function applySlope() {
   const dh = parseFloat($('#slope').value);
   for (const g of nbr.children) g.position.y = g.userData.south ? -dh : 0;
+  ground.position.y = -dh - 0.002;
+  if (ext) { ext.setSlope(dh); scheduleSunArea(); }
   $('#slopet').textContent = dh.toFixed(1) + 'm' + (Math.abs(dh - 0.5) < 0.01 ? '（配置図の値）' : '');
 }
 $('#slope').oninput = applySlope; applySlope();
+const siteChk = $('#sitechk');
+siteChk.onchange = () => { ext.site.visible = siteChk.checked; scheduleSunArea(); };
+nbrChk.addEventListener('change', scheduleSunArea);
+$('#night').onchange = () => ext.setNight($('#night').checked);
+$('#curt').onchange = () => { ext.setCurtain($('#curt').checked); scheduleSunArea(); if (inside.on) updateSee(); };
 const FURN = [
   ['sofa_02', 656, 507, 4.712389],
   ['modern_coffee_table_01', 771, 464, 4.712389],
@@ -442,7 +501,7 @@ async function showCurrent() {
   await loadModel(k);
   if (k !== curKey()) return;            // 読み込み中に別の組み合わせが選ばれた
   for (const m in models) models[m].visible = m === k;
-  msg('');
+  msg(''); scheduleSunArea();
 }
 showCurrent().then(async () => {
   loadFurniture();
@@ -458,10 +517,10 @@ showCurrent().then(async () => {
 function setVariant(v) {
   state.v = v; showCurrent();
   document.querySelectorAll('#vars button, #bar button[data-v]').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
-  drawHud(); if (inside.on) label();
+  drawHud(); if (inside.on) { label(); updateSee(); }
 }
 function setHeight(h) {
-  state.h = h; showCurrent();
+  state.h = h; showCurrent(); ext.setCurtain(null, +h / 10);
   document.querySelectorAll('button[data-h]').forEach((b) => b.classList.toggle('on', b.dataset.h === h));
   drawHud(); if (inside.on) label();
 }
@@ -521,8 +580,8 @@ function drawHud() {
   c.fillStyle = '#d9dde0'; c.font = '26px sans-serif';
   c.fillStyle = '#ffe08a'; c.fillText('日差し ' + sunLabel(), 28, 150);
   c.fillStyle = '#d9dde0'; c.font = '24px sans-serif';
-  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝高さ（押し込み＝+1時間）', 'A：案を切替　左グリップ：窓の高さ　B：はじめの位置に戻す', 'X：杭合わせ 入／切　Y：この表示を消す'];
-  t.forEach((s, i) => c.fillText(s, 28, 200 + i * 48));
+  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝高さ（押し込み＝+1時間）', 'A：案を切替　左グリップ：窓の高さ　B：はじめの位置に戻す', '右トリガー：メジャー　右グリップ：狙って離すと移動', 'X：杭合わせ 入／切　Y：この表示を消す'];
+  t.forEach((s, i) => c.fillText(s, 28, 192 + i * 42));
   hudTex.needsUpdate = true;
 }
 drawHud();
@@ -562,7 +621,7 @@ const handIndex = {};
 let pendingPlace = 0, last = performance.now();
 renderer.xr.addEventListener('sessionstart', () => { pendingPlace = 1; });
 renderer.xr.addEventListener('sessionend', () => {
-  scene.background = skyBg; ground.visible = true; nbr.visible = nbrChk.checked;
+  ground.visible = true; nbr.visible = nbrChk.checked; ext.site.visible = siteChk.checked; applyBackground();
   rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0);
 });
 
@@ -572,7 +631,9 @@ async function startXR(mode) {
     const isAR = mode === 'immersive-ar';
     scene.background = isAR ? null : skyBg;
     nbr.visible = !isAR && nbrChk.checked;   // ARでは本物の家が見えるので消す
+    ext.site.visible = !isAR && siteChk.checked;
     ground.visible = !isAR;
+    if (!isAR && ext.isNight()) scene.background = NIGHT_BG;
     await renderer.xr.setSession(session);
   } catch (e) { msg('開始できませんでした: ' + e.message); }
 }
@@ -593,6 +654,7 @@ renderer.setAnimationLoop((t, frame) => {
     hud.visible = state.help;
     const { pos: head, fwd } = headPose();
     const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+    let teleHeld = false;
     for (const src of sources) {
       const gp = src.gamepad; if (!gp || !src.handedness) continue;
       const h = src.handedness, ax = gp.axes[2] || 0, ay = gp.axes[3] || 0;
@@ -617,19 +679,22 @@ renderer.setAnimationLoop((t, frame) => {
           rig.rotation.y += da;
         }
         if (Math.abs(ay) > DZ) { rig.position.y += -ay * 0.25 * dt; drawHudThrottled(); }
-        if (edge(0)) onTrigger('right');
+        if (edge(0)) { if (state.stakeMode) onTrigger('right'); else ext.measureClick(); }
+        teleHeld = !!pressed[1];
+        if (was[1] && !pressed[1]) { ext.teleport(head); drawHud(); }                       // 右グリップを離す
         if (edge(4)) setVariant({ A: 'B', B: 'C', C: 'A' }[state.v]);                       // A
         if (edge(5)) resetPlacement();                                                        // B
         if (edge(3)) { setHour(sunState.hour >= 17 ? 7 : Math.floor(sunState.hour) + 1); drawHud(); }   // 右スティック押し込み
       }
       prevBtn[h] = pressed;
     }
+    ext.xrFrame(handIndex.right != null ? ctrl[handIndex.right] : null, teleHeld);
   } else if (inside.on) {
     updateInside(dt);
   } else {
     orbit.update();
   }
-  if (!renderer.xr.isPresenting && aoOn) composer.render(); else renderer.render(scene, camera);
+  renderFrame();
 });
 // ================= 中から見る（iPhone・パソコン） =================
 // p＝立つ位置（モデル座標 X,Z）、d＝最初に向く方向、pitch＝見上げる角度（度）、fl＝床の高さ
@@ -639,15 +704,79 @@ const VPS = {
   dining:  { name: 'ダイニング',             p: [1.0, -1.2],  d: [2.2, 3.6],   pitch: 22,  fl: '1' },
   kitchen: { name: 'キッチン',               p: [3.3, -2.2],  d: [-0.4, 3.8],  pitch: 15,  fl: '1' },
   washitsu:{ name: '和室（小上がり）',       p: [-0.25, 0.5], d: [0, 1],       pitch: 8,   fl: 'w' },
-  garden:  { name: '南の庭から',             p: [0.6, 9.5],   d: [0, -1],      pitch: 12,  fl: 'g' },
+  garden:  { name: '南の庭から（南西の角）', p: [-1.6, 4.5],  d: [1.0, -0.55], pitch: 16,  fl: 'g', out: true },
+  // 外から中がどれだけ見えるか（目の高さ 1.5m で立った人）
+  road_w:  { name: '西の道路から（通る人）', p: [-9.9, 5.6],  d: [12.8, -3.3], pitch: 2,   fl: () => roadLevel(5.6), out: true, see: true, eye: 1.5 },
+  nbr_g:   { name: '南の家の庭から',         p: [0.8, 6.3],   d: [0.5, -1],    pitch: 4,   fl: () => -slopeDH(), out: true, see: true, eye: 1.5 },
+  nbr_2f:  { name: '南の家の2階の窓から（窓の位置は想像）', p: [0.6, 9.5], d: [0.25, -1], pitch: -12, fl: () => -slopeDH() + 2.9, out: true, see: true, eye: 1.5 },
 };
+const slopeDH = () => parseFloat($('#slope').value);
+const roadLevel = (z) => { const N = -5.445, S = 4.86, dh = slopeDH(); return z <= N ? -0.15 : z >= S ? -dh : -0.15 + (-dh + 0.15) * (z - N) / (S - N); };
 const inside = { on: false, vp: 'sofa', sit: true, yaw: 0, pitch: 0, gyro: false, gyroOffset: 0, move: 0, dev: null, orient: 0, needCal: false };
 const vpSel = $('#vp');
 for (const k in VPS) { const o = document.createElement('option'); o.value = k; o.textContent = VPS[k].name; vpSel.append(o); }
 
-const seated = () => inside.sit && VPS[inside.vp].fl !== 'g';
-function eyeY() { return FLH[VPS[inside.vp].fl] + (seated() ? 1.1 : 1.55); }
+const seated = () => inside.sit && !VPS[inside.vp].out;
+const vpFloor = (v) => (typeof v.fl === 'function' ? v.fl() : FLH[v.fl]);
+function eyeY() { const v = VPS[inside.vp]; return vpFloor(v) + (seated() ? 1.1 : (v.eye ?? 1.55)); }
+// 外から見る位置のとき：リビングの中がどれだけ見えるか（窓の高さ 3 種）
+let seeSeq = 0;
+async function updateSee() {
+  const v = VPS[inside.vp], el = $('#seeinfo');
+  if (!v.see) { el.style.display = 'none'; return; }
+  const my = ++seeSeq;
+  el.style.display = 'block'; el.textContent = 'リビングの中の見え方を計算中…';
+  const eye = [v.p[0], eyeY(), v.p[1]], rows = [];
+  for (const h of ['20', '22', '24']) {
+    const r = await ext.seeInside(eye, h);
+    if (my !== seeSeq) return;
+    rows.push(`<span${h === state.h ? ' style="color:var(--accent);font-weight:600"' : ''}>${(h / 10).toFixed(1)}m ${Math.round(r.floor * 100)}%／${Math.round(r.head * 100)}%</span>`);
+  }
+  el.innerHTML = '<b>ここから見えるリビング</b>（床／座った人の顔・案' + state.v + ($('#curt').checked ? '・カーテン閉' : '') + '）<br>リビングの窓 ' + rows.join('　');
+}
 function label() { $('#vpname').textContent = VPS[inside.vp].name + '・' + (seated() ? '座った目線' : '立った目線') + '・案' + state.v + '・リビング窓' + (state.h / 10).toFixed(1) + 'm'; }
+// 比較画像の立ち位置
+const SHEET_VPS = ['sofa', 'dining', 'garden', 'nbr_g', 'nbr_2f', 'road_w'];
+for (const k of SHEET_VPS) { const o = document.createElement('option'); o.value = k; o.textContent = VPS[k].name + (VPS[k].out ? '' : '（座った目線）'); $('#sheetvp').append(o); }
+function vpCamera(k, sit = true) {
+  const v = VPS[k], y = vpFloor(v) + (sit && !v.out ? 1.1 : (v.eye ?? 1.55));
+  return { eye: [v.p[0], y, v.p[1]], yaw: heading(new THREE.Vector3(v.d[0], 0, v.d[1])), pitch: THREE.MathUtils.degToRad(v.pitch) };
+}
+async function makeSheet(k) {
+  const title = VPS[k].name + '　' + SEASON_NAME[sunState.season] + ' ' + document.querySelector('.sunrow .t').textContent + (ext.isNight() ? '（夜）' : '') + ($('#curt').checked ? '・カーテン閉' : '');
+  const wasInside = inside.on; if (wasInside) exitInside();
+  const sheet = await ext.makeSheet(vpCamera(k), title);
+  if (wasInside) { enterInside(); }
+  return sheet;
+}
+$('#sheet').onclick = async () => {
+  const b = $('#sheet'); b.disabled = true; b.textContent = '作成中…';
+  try {
+    const sheet = await makeSheet($('#sheetvp').value);
+    const blob = await new Promise((r) => sheet.toBlob(r, 'image/jpeg', 0.9));
+    const url = URL.createObjectURL(blob);
+    $('#sheetimg').src = url; $('#sheetdl').href = url; $('#sheetdl').download = '比較_' + VPS[$('#sheetvp').value].name.replace(/[（）・\s]/g, '') + '.jpg';
+    $('#sheetbox').style.display = 'block';
+  } finally { b.disabled = false; b.textContent = '9通りを並べた画像'; }
+};
+$('#sheetclose').onclick = () => { $('#sheetbox').style.display = 'none'; };
+// 冬至の日だまり：8〜16時を1時間おきに、床に日が当たる面積を足す（㎡・時間）
+$('#daytbl').onclick = async () => {
+  const b = $('#daytbl'), out = $('#daytblout'); b.disabled = true;
+  const res = {}; let best = 0;
+  for (const v of ['A', 'B', 'C']) for (const h of ['20', '22', '24']) {
+    const k = v + '_' + h; out.textContent = '計算中… ' + k.replace('_', '・窓'); await loadModel(k);
+    await new Promise((r) => setTimeout(r, 0));
+    let sum = 0; const dir = new THREE.Vector3();
+    for (let t = 8; t <= 16.001; t += 1) sum += ext.sunArea(k, sunDir(12, 22, t, dir));   // 1時間おき
+    res[k] = sum; best = Math.max(best, sum);
+  }
+  const cell = (k) => `<td class="${res[k] >= best - 0.05 ? 'best' : ''}">${res[k].toFixed(1)}</td>`;
+  out.innerHTML = '<table class="num"><tr><th>案＼リビングの窓</th><th>2.0m</th><th>2.2m</th><th>2.4m</th></tr>' +
+    ['A', 'B', 'C'].map((v) => `<tr><td>${v}</td>${cell(v + '_20')}${cell(v + '_22')}${cell(v + '_24')}</tr>`).join('') + '</table>' +
+    `<span style="color:var(--sub)">冬至の8〜16時（1時間おき）に、LDK＋和室の床に日が当たる量（㎡×時間）。周りの家${nbrChk.checked ? 'あり' : 'なし'}・南の隣地 ${slopeDH().toFixed(1)}m 低い・カーテン${$('#curt').checked ? '閉' : '開'}で計算。</span>`;
+  b.disabled = false;
+};
 function goVP(k) {
   inside.vp = k; vpSel.value = k;
   const v = VPS[k];
@@ -655,7 +784,7 @@ function goVP(k) {
   inside.yaw = heading(new THREE.Vector3(v.d[0], 0, v.d[1]));
   inside.pitch = THREE.MathUtils.degToRad(v.pitch);
   if (inside.gyro) calibrateGyro();
-  label();
+  label(); updateSee();
 }
 // 縦長の画面でも横に60°は見えるように画角を決める（上限100°）
 function fitFov() {
@@ -758,7 +887,7 @@ function updateInside(dt) {
   }
 }
 
-window._dbg = { goVP, sunState, setHour, applySun, placeSun, composer, furn, enterInside, exitInside, inside, rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
+window._dbg = { ext, makeSheet, vpCamera, renderFrame, updateSee, sunDir, setVariant, setHeight, goVP, sunState, setHour, applySun, placeSun, composer, furn, enterInside, exitInside, inside, rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
 let hudTimer = 0;
 function drawHudThrottled() { const n = performance.now(); if (n - hudTimer > 150) { hudTimer = n; drawHud(); } }
 </script>
