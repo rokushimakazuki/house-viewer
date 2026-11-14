@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>iPhoneでAR</title>
+<style>
+  :root { --bg:#f4f2ee; --fg:#22262a; --sub:#5d646b; --card:#fff; --line:#d9d5ce; --accent:#d85a10; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#16181a; --fg:#eceae6; --sub:#a4a9ae; --card:#1f2225; --line:#3a3e42; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:16px; }
+  h1 { font-size:20px; margin:4px 0 6px; }
+  .sub { color:var(--sub); font-size:14px; margin:0 0 14px; line-height:1.6; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:12px; }
+  .card h2 { font-size:16px; margin:0 0 8px; }
+  .row { display:flex; gap:10px; }
+  a.ar { flex:1; display:block; text-decoration:none; color:var(--fg); border:1px solid var(--line); border-radius:12px; overflow:hidden; text-align:center; }
+  a.ar img { display:block; width:100%; aspect-ratio:4/3; object-fit:cover; }
+  a.ar span { display:block; padding:8px 4px; font-weight:600; font-size:15px; }
+  a.ar.mid span { color:var(--accent); }
+  ol { padding-left:1.3em; font-size:14px; line-height:1.7; color:var(--sub); }
+  .back { font-size:14px; color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>iPhone・iPadでARで見る</h1>
+  <p class="sub">写真をタップすると、カメラの景色の中に家が実物大で出ます。上が吹抜けの高窓の案、下の数字がリビングの大きい窓の高さです。</p>
+
+  <div class="card"><h2>A 低いFIX×2（プランシートどおり）</h2><div class="row">
+    <a class="ar" rel="ar" href="usdz/A_20.usdz"><img src="usdz/A.jpg" alt=""><span>窓 2.0m</span></a>
+    <a class="ar mid" rel="ar" href="usdz/A_22.usdz"><img src="usdz/A.jpg" alt=""><span>窓 2.2m</span></a>
+    <a class="ar" rel="ar" href="usdz/A_24.usdz"><img src="usdz/A.jpg" alt=""><span>窓 2.4m</span></a>
+  </div></div>
+  <div class="card"><h2>B 少し上のFIX×2</h2><div class="row">
+    <a class="ar" rel="ar" href="usdz/B_20.usdz"><img src="usdz/B.jpg" alt=""><span>窓 2.0m</span></a>
+    <a class="ar mid" rel="ar" href="usdz/B_22.usdz"><img src="usdz/B.jpg" alt=""><span>窓 2.2m</span></a>
+    <a class="ar" rel="ar" href="usdz/B_24.usdz"><img src="usdz/B.jpg" alt=""><span>窓 2.4m</span></a>
+  </div></div>
+  <div class="card"><h2>C 横長FIX</h2><div class="row">
+    <a class="ar" rel="ar" href="usdz/C_20.usdz"><img src="usdz/C.jpg" alt=""><span>窓 2.0m</span></a>
+    <a class="ar mid" rel="ar" href="usdz/C_22.usdz"><img src="usdz/C.jpg" alt=""><span>窓 2.2m</span></a>
+    <a class="ar" rel="ar" href="usdz/C_24.usdz"><img src="usdz/C.jpg" alt=""><span>窓 2.4m</span></a>
+  </div></div>
+
+  <div class="card"><h2>使い方</h2><ol>
+    <li>Safari で開いて、見たい組み合わせの写真をタップ（1つ約0.9MB）。</li>
+    <li>上の「AR」を選び、iPhone をゆっくり動かして床や地面を映すと、家が置かれる。</li>
+    <li>「実物大」にするには、2本指で拡大縮小しないこと（縮めたときは、下の表示を「100%」に戻す）。</li>
+    <li>家の中に入ると、窓ガラス越しに本物の外の景色が見える。家は約9.6m×8.2mなので、広い場所で。</li>
+  </ol></div>
+  <p class="sub">地面に立って見ると、目の高さは1階の床から約1m（家は地面より59cm高い）。ソファに座ったくらいの目線になります。日差し・周りの家・家具の入った見え方は <a class="back" href="./">こちらのページ</a>（ARではなく画面で見る）。</p>
+</main>
+</body>
+</html>
