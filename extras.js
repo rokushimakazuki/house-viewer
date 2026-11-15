@@ -467,7 +467,7 @@ export function initExtras(ctx) {
   // ---------------- 比較画像（3案 × 窓の高さ 3 種） ----------------
   ext.makeSheet = async (vp, title) => {
     const CW = 640, CH = 480, HEAD = 70, LBL = 34;
-    const sheet = document.createElement('canvas'); sheet.width = CW * 3; sheet.height = HEAD + (CH + LBL) * 3;
+    const sheet = document.createElement('canvas'); sheet.width = CW * 3; sheet.height = HEAD + (CH + LBL) * (ctx.vars || ['A', 'B']).length;
     const g = sheet.getContext('2d');
     g.fillStyle = '#f4f2ee'; g.fillRect(0, 0, sheet.width, sheet.height);
     g.fillStyle = '#22262a'; g.font = 'bold 30px sans-serif'; g.fillText(title, 20, 45);
@@ -477,7 +477,7 @@ export function initExtras(ctx) {
     camera.position.set(...vp.eye); camera.rotation.set(vp.pitch, vp.yaw, 0, 'YXZ');
     const VN = { A: 'A 低いFIX×2', B: 'B 少し上のFIX×2', C: 'C 横長FIX' };
     let row = 0;
-    for (const v of ['A', 'B', 'C']) {
+    for (const v of (ctx.vars || ['A', 'B'])) {
       let col = 0;
       for (const h of ['20', '22', '24']) {
         const key = v + '_' + h; await ctx.loadModel(key);

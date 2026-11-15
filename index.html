@@ -30,6 +30,13 @@
   #bar { position:fixed; left:12px; right:12px; bottom:max(12px, env(safe-area-inset-bottom)); display:none;
          background:var(--card); border:1px solid var(--line); border-radius:14px; padding:10px; backdrop-filter:blur(6px); }
   #bar .row + .row { margin-top:8px; }
+  #bar #barmin { position:absolute; right:12px; bottom:100%; padding:4px 12px; font-size:13px; border-radius:10px 10px 0 0; border-bottom:none; background:var(--card); backdrop-filter:blur(6px); }
+  #bar.min { background:transparent; border-color:transparent; padding:0; backdrop-filter:none; min-height:0; }
+  #bar.min > :not(#barmin) { display:none !important; }
+  #bar.min #barmin { border-radius:10px; border-bottom:1px solid var(--line); padding:8px 14px; font-size:14px; }
+  body.barmin #vpname { display:none !important; }
+  #bar .sunrow { flex:1; min-width:0; }
+  #bar .sunrow select { flex:0 0 auto; }
   #bar button { padding:9px 11px; font-size:14px; }
   #bar select { font:inherit; font-size:15px; flex:1; min-width:0; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--fg); padding:8px; }
   #bar .mv { flex:1; font-size:18px; touch-action:none; user-select:none; -webkit-user-select:none; }
@@ -59,14 +66,13 @@
 <div id="ui">
   <button id="hide">隠す</button>
   <h1>家の実物大ビュー</h1>
-  <p class="sub">吹抜けの高窓 3案の比較用。Meta Quest 3 のブラウザで開くと、実物大で見られます。</p>
-  <p class="sub" style="margin-top:-6px"><a href="ar.html" style="color:var(--accent);font-weight:600">▶ iPhone・iPadでARで見る（9通り）</a></p>
+  <p class="sub">吹抜けの高窓 2案の比較用。Meta Quest 3 のブラウザで開くと、実物大で見られます。</p>
+  <p class="sub" style="margin-top:-6px"><a href="ar.html" style="color:var(--accent);font-weight:600">▶ iPhone・iPadでARで見る（6通り）</a></p>
 
   <div class="lbl">吹抜けの高窓</div>
   <div class="row" id="vars">
     <button data-v="A" class="on">A 低いFIX×2</button>
     <button data-v="B">B 少し上のFIX×2</button>
-    <button data-v="C">C 横長FIX</button>
   </div>
 
   <div class="lbl">リビングの大きい窓の高さ（床から上端まで）</div>
@@ -119,11 +125,11 @@
   <div class="row"><button class="go" id="inside">中から見る</button></div>
 
   <div class="lbl">数字で比べる</div>
-  <div class="row"><button id="daytbl">冬至の日だまり 9通り</button></div>
+  <div class="row"><button id="daytbl">冬至の日だまり 6通り</button></div>
   <div id="daytblout" style="font-size:13px"></div>
   <div class="row" style="margin-top:8px">
     <select id="sheetvp" style="font:inherit;font-size:14px;flex:1;min-width:0;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--fg);padding:8px"></select>
-    <button id="sheet">9通りを並べた画像</button>
+    <button id="sheet">6通りを並べた画像</button>
   </div>
 
   <details open>
@@ -132,7 +138,7 @@
       <tr><td>左スティック</td><td>歩く（家の中・外を移動）</td></tr>
       <tr><td>右スティック 左右</td><td>向きを変える</td></tr>
       <tr><td>右スティック 上下</td><td>家の高さを上げ下げ（地面に合わせる）</td></tr>
-      <tr><td>A ボタン</td><td>案を切り替え A→B→C</td></tr>
+      <tr><td>A ボタン</td><td>案を切り替え A⇄B</td></tr>
       <tr><td>B ボタン</td><td>はじめの位置に戻す（今いる場所・向きが基準）</td></tr>
       <tr><td>X ボタン</td><td>杭合わせモード 入／切</td></tr>
       <tr><td>右トリガー</td><td>（杭合わせ中）①緑の杭（南西）の根元で押す → ②黄色の杭（南東）の根元で押す</td></tr>
@@ -150,9 +156,10 @@
 <button id="show">操作パネル</button>
 <div id="vpname"></div>
 <div id="bar">
+  <button id="barmin" title="操作をたたむ">▼ たたむ</button>
   <div class="row">
     <select id="vp"></select>
-    <button data-v="A" class="on">A</button><button data-v="B">B</button><button data-v="C">C</button>
+    <button data-v="A" class="on">A</button><button data-v="B">B</button>
     <button id="wide" title="画角を切り替える">標準</button>
   </div>
   <div class="row">
@@ -205,6 +212,7 @@ const STARTS = {
 };
 const VAR_NAME = { A: 'A 低いFIX×2', B: 'B 少し上のFIX×2', C: 'C 横長FIX' };
 
+const VARS = ['A', 'B'];   // 案C（横長FIX）は準防火地域で無理なので外した（11/15）
 const state = { v: 'A', h: '22', start: 'out', stakeMode: false, stakeStep: 0, help: true };
 const $ = (s) => document.querySelector(s);
 const msg = (t) => { $('#msg').textContent = t; };
@@ -429,7 +437,7 @@ const NEIGHBORS = [
 const nbr = new THREE.Group(); rig.add(nbr);
 function renderFrame() { if (!renderer.xr.isPresenting && aoOn) composer.render(); else renderer.render(scene, camera); }
 ext = initExtras({
-  scene, rig, renderer, camera, composer, models, furn, nbr, NEIGHBORS, ground, state, tex,
+  scene, rig, renderer, camera, composer, models, furn, nbr, NEIGHBORS, ground, state, tex, vars: VARS,
   loadModel: (k) => loadModel(k), curKey: () => curKey(), render: renderFrame,
   onNight: () => { applyBackground(); renderer.toneMappingExposure = ext.isNight() ? 1.0 : 1.1; applySun(); },
 });
@@ -507,7 +515,7 @@ async function showCurrent() {
 showCurrent().then(async () => {
   loadFurniture();
   // 残りの組み合わせを裏で読んでおく（切り替えを速くする）
-  (async () => { for (const v of ['A', 'B', 'C']) for (const h of ['20', '22', '24']) await loadModel(v + '_' + h).catch(() => {}); })();
+  (async () => { for (const v of VARS) for (const h of ['20', '22', '24']) await loadModel(v + '_' + h).catch(() => {}); })();
   const ar = navigator.xr && await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
   const vr = navigator.xr && await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
   $('#ar').disabled = !ar; $('#vr').disabled = !vr;
@@ -683,7 +691,7 @@ renderer.setAnimationLoop((t, frame) => {
         if (edge(0)) { if (state.stakeMode) onTrigger('right'); else ext.measureClick(); }
         teleHeld = !!pressed[1];
         if (was[1] && !pressed[1]) { ext.teleport(head); drawHud(); }                       // 右グリップを離す
-        if (edge(4)) setVariant({ A: 'B', B: 'C', C: 'A' }[state.v]);                       // A
+        if (edge(4)) setVariant({ A: 'B', B: 'A' }[state.v]);                       // A
         if (edge(5)) resetPlacement();                                                        // B
         if (edge(3)) { setHour(sunState.hour >= 17 ? 7 : Math.floor(sunState.hour) + 1); drawHud(); }   // 右スティック押し込み
       }
@@ -758,14 +766,14 @@ $('#sheet').onclick = async () => {
     const url = URL.createObjectURL(blob);
     $('#sheetimg').src = url; $('#sheetdl').href = url; $('#sheetdl').download = '比較_' + VPS[$('#sheetvp').value].name.replace(/[（）・\s]/g, '') + '.jpg';
     $('#sheetbox').style.display = 'block';
-  } finally { b.disabled = false; b.textContent = '9通りを並べた画像'; }
+  } finally { b.disabled = false; b.textContent = '6通りを並べた画像'; }
 };
 $('#sheetclose').onclick = () => { $('#sheetbox').style.display = 'none'; };
 // 冬至の日だまり：8〜16時を1時間おきに、床に日が当たる面積を足す（㎡・時間）
 $('#daytbl').onclick = async () => {
   const b = $('#daytbl'), out = $('#daytblout'); b.disabled = true;
   const res = {}; let best = 0;
-  for (const v of ['A', 'B', 'C']) for (const h of ['20', '22', '24']) {
+  for (const v of VARS) for (const h of ['20', '22', '24']) {
     const k = v + '_' + h; out.textContent = '計算中… ' + k.replace('_', '・窓'); await loadModel(k);
     await new Promise((r) => setTimeout(r, 0));
     let sum = 0; const dir = new THREE.Vector3();
@@ -774,7 +782,7 @@ $('#daytbl').onclick = async () => {
   }
   const cell = (k) => `<td class="${res[k] >= best - 0.05 ? 'best' : ''}">${res[k].toFixed(1)}</td>`;
   out.innerHTML = '<table class="num"><tr><th>案＼リビングの窓</th><th>2.0m</th><th>2.2m</th><th>2.4m</th></tr>' +
-    ['A', 'B', 'C'].map((v) => `<tr><td>${v}</td>${cell(v + '_20')}${cell(v + '_22')}${cell(v + '_24')}</tr>`).join('') + '</table>' +
+    VARS.map((v) => `<tr><td>${v}</td>${cell(v + '_20')}${cell(v + '_22')}${cell(v + '_24')}</tr>`).join('') + '</table>' +
     `<span style="color:var(--sub)">冬至の8〜16時（1時間おき）に、LDK＋和室の床に日が当たる量（㎡×時間）。周りの家${nbrChk.checked ? 'あり' : 'なし'}・南の隣地 ${slopeDH().toFixed(1)}m 低い・カーテン${$('#curt').checked ? '閉' : '開'}で計算。</span>`;
   b.disabled = false;
 };
@@ -822,6 +830,11 @@ function exitInside() {
   camera.position.set(6, 9, 22); orbit.target.set(0, 2.5, 0); orbit.update();
   $('#bar').style.display = 'none'; $('#vpname').style.display = 'none'; $('#ui').style.display = '';
 }
+$('#barmin').onclick = () => {
+  const m = !$('#bar').classList.contains('min');
+  $('#bar').classList.toggle('min', m); document.body.classList.toggle('barmin', m);
+  $('#barmin').textContent = m ? '▲ 操作' : '▼ たたむ';
+};
 $('#inside').onclick = enterInside;
 $('#exit').onclick = exitInside;
 vpSel.onchange = () => goVP(vpSel.value);
