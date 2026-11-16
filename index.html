@@ -137,7 +137,7 @@
     <table>
       <tr><td>左スティック</td><td>歩く（家の中・外を移動）</td></tr>
       <tr><td>右スティック 左右</td><td>向きを変える</td></tr>
-      <tr><td>右スティック 上下</td><td>家の高さを上げ下げ（地面に合わせる）</td></tr>
+      <tr><td>右スティック 上下</td><td>家・周りの家・地面をまとめて上げ下げ（床合わせ／手前に倒すと脚立に乗ったのと同じ）。手元に「目の高さ：床から ○m」と窓の上端との差が出る</td></tr>
       <tr><td>A ボタン</td><td>案を切り替え A⇄B</td></tr>
       <tr><td>B ボタン</td><td>はじめの位置に戻す（今いる場所・向きが基準）</td></tr>
       <tr><td>X ボタン</td><td>杭合わせモード 入／切</td></tr>
@@ -572,25 +572,35 @@ function resetPlacement() {
 }
 
 // ---- 手元の説明（左手） ----
-const hudCanvas = document.createElement('canvas'); hudCanvas.width = 640; hudCanvas.height = 400;
+const hudCanvas = document.createElement('canvas'); hudCanvas.width = 640; hudCanvas.height = 440;
 const hudTex = new THREE.CanvasTexture(hudCanvas); hudTex.colorSpace = THREE.SRGBColorSpace;
-const hud = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.15), new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false }));
+const hud = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.165), new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false }));
 hud.renderOrder = 999; hud.position.set(0, 0.07, -0.06); hud.rotation.x = -0.9;
 function drawHud() {
   const c = hudCanvas.getContext('2d');
-  c.clearRect(0, 0, 640, 400);
-  c.fillStyle = 'rgba(20,22,24,0.82)'; c.beginPath(); c.roundRect(0, 0, 640, 400, 28); c.fill();
+  c.clearRect(0, 0, 640, 440);
+  c.fillStyle = 'rgba(20,22,24,0.82)'; c.beginPath(); c.roundRect(0, 0, 640, 440, 28); c.fill();
   c.fillStyle = '#fff'; c.font = 'bold 40px sans-serif';
   c.fillText('案 ' + VAR_NAME[state.v] + '／窓' + (state.h / 10).toFixed(1) + 'm', 28, 60);
   c.font = '28px sans-serif'; c.fillStyle = '#ffb27a';
+  let line3 = '';
   let line2 = '家の高さ ' + (rig.position.y >= 0 ? '+' : '') + rig.position.y.toFixed(2) + ' m';
+  if (renderer.xr.isPresenting) {
+    // 目の高さ：家の中なら1階の床から、外なら地面から（家・周りの家・地面はいっしょに動くので、景色との関係は崩れない）
+    const m = rig.worldToLocal(headPose().pos);
+    const inHouse = m.x > -4.78 && m.x < 4.78 && m.z > -4.10 && m.z < 2.28;
+    const eye = m.y - (inHouse ? FL1 : 0);
+    line2 = (inHouse ? '目の高さ：床から ' : '目の高さ：地面から ') + eye.toFixed(2) + ' m';
+    if (inHouse) { const d = state.h / 10 - eye; line3 = '窓の上端 ' + (state.h / 10).toFixed(1) + 'm は目より ' + (d >= 0 ? '+' : '') + d.toFixed(2) + ' m'; }
+  }
+  if (state.stakeMode) line3 = '';
   if (state.stakeMode) line2 = state.stakeStep === 0 ? '杭合わせ①：緑の杭（南西）の根元で右トリガー' : '杭合わせ②：黄色の杭（南東）の根元で右トリガー';
-  c.fillText(line2, 28, 108);
-  c.fillStyle = '#d9dde0'; c.font = '26px sans-serif';
-  c.fillStyle = '#ffe08a'; c.fillText('日差し ' + sunLabel(), 28, 150);
+  c.fillText(line2, 28, 104);
+  c.font = '26px sans-serif'; if (line3) c.fillText(line3, 28, 142);
+  c.fillStyle = '#ffe08a'; c.fillText('日差し ' + sunLabel(), 28, 184);
   c.fillStyle = '#d9dde0'; c.font = '24px sans-serif';
-  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝高さ（押し込み＝+1時間）', 'A：案を切替　左グリップ：窓の高さ　B：はじめの位置に戻す', '右トリガー：メジャー　右グリップ：狙って離すと移動', 'X：杭合わせ 入／切　Y：この表示を消す'];
-  t.forEach((s, i) => c.fillText(s, 28, 192 + i * 42));
+  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝家ごと上げ下げ（押し込み＝+1時間）', 'A：案を切替　左グリップ：窓の高さ　B：はじめの位置に戻す', '右トリガー：メジャー　右グリップ：狙って離すと移動', 'X：杭合わせ 入／切　Y：この表示を消す'];
+  t.forEach((s, i) => c.fillText(s, 28, 228 + i * 42));
   hudTex.needsUpdate = true;
 }
 drawHud();
@@ -601,6 +611,7 @@ const grips = [0, 1].map((i) => { const g = renderer.xr.getControllerGrip(i); sc
 // 握っている位置の目印（小さな球）
 grips.forEach((g) => g.add(new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffaa55 }))));
 const prevBtn = {};
+let eyeHudT = 0;
 
 function onTrigger(hand) {
   if (hand !== 'right' || !state.stakeMode) return;
@@ -661,6 +672,7 @@ renderer.setAnimationLoop((t, frame) => {
     // HUD を左手に付ける
     if (handIndex.left != null && hud.parent !== grips[handIndex.left]) grips[handIndex.left].add(hud);
     hud.visible = state.help;
+    if (state.help && !state.stakeMode && performance.now() - eyeHudT > 400) { eyeHudT = performance.now(); drawHud(); }
     const { pos: head, fwd } = headPose();
     const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
     let teleHeld = false;
