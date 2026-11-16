@@ -141,7 +141,7 @@
       <tr><td>A ボタン</td><td>案を切り替え A⇄B</td></tr>
       <tr><td>B ボタン</td><td>はじめの位置に戻す（今いる場所・向きが基準）</td></tr>
       <tr><td>X ボタン</td><td>杭合わせモード 入／切</td></tr>
-      <tr><td>右トリガー</td><td>（杭合わせ中）①緑の杭（南西）の根元で押す → ②黄色の杭（南東）の根元で押す</td></tr>
+      <tr><td>右トリガー</td><td>（杭合わせ中）①緑の杭（南西）の根元で押す → ②黄色の杭（南東）の根元で押す → ③道路の路面に当てて押す＝高さを道路に合わせる（北の私道 GL−150 がおすすめ。X で省略）</td></tr>
       <tr><td>Y ボタン</td><td>手元の説明を出す／消す</td></tr>
       <tr><td>左グリップ（中指）</td><td>リビングの窓の高さを切り替え 2.0→2.2→2.4m</td></tr>
       <tr><td>右スティック 押し込み</td><td>日差しの時刻を1時間進める</td></tr>
@@ -572,18 +572,58 @@ function resetPlacement() {
 }
 
 // ---- 手元の説明（左手） ----
-const hudCanvas = document.createElement('canvas'); hudCanvas.width = 640; hudCanvas.height = 440;
+const hudCanvas = document.createElement('canvas'); hudCanvas.width = 640; hudCanvas.height = 470;
 const hudTex = new THREE.CanvasTexture(hudCanvas); hudTex.colorSpace = THREE.SRGBColorSpace;
-const hud = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.165), new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false }));
+const hud = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.176), new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false }));
 hud.renderOrder = 999; hud.position.set(0, 0.07, -0.06); hud.rotation.x = -0.9;
+// 身長165cmの人の目の高さ（目安）。立つ＝身長×0.93、座ったときの目は座面から約0.76m
+const REF_H = 1.65;
+const POSE = { stand: REF_H * 0.93, chair: 0.43 + 0.76, sofa: 0.36 + 0.72, floor: 0.04 + 0.76 };
+function postureOf(e) {
+  const cm = (v) => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v * 100)) + 'cm';
+  const P = POSE, who = '165cmの人：';
+  if (e >= P.stand + 0.04) return { kind: 'step', text: who + '台に乗る（' + cm(e - P.stand) + '）' };
+  if (e >= P.stand - 0.04) return { kind: 'stand', text: who + '立った目線' };
+  if (e >= P.chair + 0.08) return { kind: 'crouch', text: who + '少しかがむ（' + cm(e - P.stand) + '）' };
+  if (e >= (P.chair + P.sofa) / 2) return { kind: 'chair', text: who + 'イスに座る（' + cm(e - P.chair) + '）' };
+  if (e >= (P.sofa + P.floor) / 2) return { kind: 'sofa', text: who + 'ソファに座る（' + cm(e - P.sofa) + '）' };
+  if (e >= P.floor - 0.15) return { kind: 'floor', text: who + '床に座る（' + cm(e - P.floor) + '）' };
+  return { kind: 'lie', text: who + '寝転ぶくらい' };
+}
+// 小さな人の絵（足元が (x, y)、高さ約90px）
+function drawPose(c, k, x, y) {
+  c.save(); c.strokeStyle = '#ffb27a'; c.fillStyle = '#ffb27a'; c.lineWidth = 5; c.lineCap = 'round'; c.lineJoin = 'round';
+  const head = (hx, hy) => { c.beginPath(); c.arc(hx, hy, 8, 0, Math.PI * 2); c.fill(); };
+  const line = (...pts) => { c.beginPath(); c.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]); c.stroke(); };
+  const seat = (sy, w) => { c.lineWidth = 3; c.strokeStyle = '#9aa3a8'; line(x - 4, y, x - 4, sy, x + 26, sy); if (w) line(x - 4, sy, x - 4, sy - w); c.lineWidth = 5; c.strokeStyle = '#ffb27a'; };
+  if (k === 'stand' || k === 'step') {
+    let b = y; if (k === 'step') { c.fillStyle = '#9aa3a8'; c.fillRect(x - 18, y - 16, 36, 16); c.fillStyle = '#ffb27a'; b = y - 16; }
+    head(x, b - 74); line(x, b - 64, x, b - 32); line(x - 8, b, x, b - 32, x + 8, b); line(x - 12, b - 48, x, b - 58, x + 12, b - 48);
+  } else if (k === 'crouch') {
+    head(x + 6, y - 60); line(x + 4, y - 50, x - 2, y - 22); line(x - 2, y - 22, x + 12, y - 12, x + 4, y); line(x - 2, y - 22, x - 10, y - 10, x - 10, y); line(x + 2, y - 40, x + 16, y - 30);
+  } else if (k === 'chair' || k === 'sofa') {
+    const sy = k === 'chair' ? y - 28 : y - 20;
+    seat(sy, k === 'chair' ? 34 : 24);
+    head(x + 2, sy - 50); line(x + 2, sy - 40, x + 2, sy - 4); line(x + 2, sy - 4, x + 22, sy - 4, x + 22, y); line(x + 2, sy - 28, x + 16, sy - 18);
+  } else if (k === 'floor') {
+    head(x, y - 50); line(x, y - 40, x, y - 6); line(x - 16, y - 2, x + 18, y - 2); line(x, y - 26, x + 14, y - 14);
+  } else {
+    head(x - 24, y - 10); line(x - 14, y - 8, x + 28, y - 8);
+  }
+  c.restore();
+}
+function fitText(c, s, x, y, size, maxW, bold) {
+  let f = size; do { c.font = (bold ? 'bold ' : '') + f + 'px sans-serif'; } while (c.measureText(s).width > maxW && --f > 14);
+  c.fillText(s, x, y);
+}
 function drawHud() {
   const c = hudCanvas.getContext('2d');
-  c.clearRect(0, 0, 640, 440);
-  c.fillStyle = 'rgba(20,22,24,0.82)'; c.beginPath(); c.roundRect(0, 0, 640, 440, 28); c.fill();
+  c.clearRect(0, 0, 640, 470);
+  c.fillStyle = 'rgba(20,22,24,0.82)'; c.beginPath(); c.roundRect(0, 0, 640, 470, 28); c.fill();
   c.fillStyle = '#fff'; c.font = 'bold 40px sans-serif';
-  c.fillText('案 ' + VAR_NAME[state.v] + '／窓' + (state.h / 10).toFixed(1) + 'm', 28, 60);
+  fitText(c, '案 ' + VAR_NAME[state.v] + '／窓' + (state.h / 10).toFixed(1) + 'm', 28, 60, 40, 590, true);
   c.font = '28px sans-serif'; c.fillStyle = '#ffb27a';
-  let line3 = '';
+  let line3 = '', line4 = '', poseKind = null;
   let line2 = '家の高さ ' + (rig.position.y >= 0 ? '+' : '') + rig.position.y.toFixed(2) + ' m';
   if (renderer.xr.isPresenting) {
     // 目の高さ：家の中なら1階の床から、外なら地面から（家・周りの家・地面はいっしょに動くので、景色との関係は崩れない）
@@ -591,16 +631,24 @@ function drawHud() {
     const inHouse = m.x > -4.78 && m.x < 4.78 && m.z > -4.10 && m.z < 2.28;
     const eye = m.y - (inHouse ? FL1 : 0);
     line2 = (inHouse ? '目の高さ：床から ' : '目の高さ：地面から ') + eye.toFixed(2) + ' m';
-    if (inHouse) { const d = state.h / 10 - eye; line3 = '窓の上端 ' + (state.h / 10).toFixed(1) + 'm は目より ' + (d >= 0 ? '+' : '') + d.toFixed(2) + ' m'; }
+    const ps = postureOf(eye); poseKind = ps.kind; line3 = ps.text;
+    if (inHouse) { const d = state.h / 10 - eye; line4 = '窓の上端 ' + (state.h / 10).toFixed(1) + 'm は目より ' + (d >= 0 ? '+' : '') + d.toFixed(2) + ' m'; }
   }
-  if (state.stakeMode) line3 = '';
-  if (state.stakeMode) line2 = state.stakeStep === 0 ? '杭合わせ①：緑の杭（南西）の根元で右トリガー' : '杭合わせ②：黄色の杭（南東）の根元で右トリガー';
-  c.fillText(line2, 28, 104);
-  c.font = '26px sans-serif'; if (line3) c.fillText(line3, 28, 142);
-  c.fillStyle = '#ffe08a'; c.fillText('日差し ' + sunLabel(), 28, 184);
+  if (state.stakeMode) {
+    poseKind = null; line4 = '';
+    if (state.stakeStep === 0) { line2 = '杭合わせ①：緑の杭（南西）の根元で'; line3 = '右手の先を当てて右トリガー'; }
+    else if (state.stakeStep === 1) { line2 = '杭合わせ②：黄色の杭（南東）の根元で'; line3 = '右手の先を当てて右トリガー'; }
+    else { line2 = '③高さ：道路の路面に右手の先を当てて'; line3 = state.stakeErr ? '道路の上ではありません。当て直して右トリガー' : '右トリガー（北の私道が平らでおすすめ／Xで省略）'; }
+  }
+  const tw = poseKind ? 510 : 590;
+  fitText(c, line2, 28, 104, 28, tw);
+  if (line3) fitText(c, line3, 28, 140, 25, tw);
+  if (line4) { c.fillStyle = '#ffd2b0'; fitText(c, line4, 28, 174, 25, tw); }
+  if (poseKind) drawPose(c, poseKind, 575, 168);
+  c.fillStyle = '#ffe08a'; fitText(c, '日差し ' + sunLabel(), 28, 214, 25, 590);
   c.fillStyle = '#d9dde0'; c.font = '24px sans-serif';
-  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝家ごと上げ下げ（押し込み＝+1時間）', 'A：案を切替　左グリップ：窓の高さ　B：はじめの位置に戻す', '右トリガー：メジャー　右グリップ：狙って離すと移動', 'X：杭合わせ 入／切　Y：この表示を消す'];
-  t.forEach((s, i) => c.fillText(s, 28, 228 + i * 42));
+  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝家ごと上下（押込＝+1時間）', 'A：案を切替　左グリップ：窓の高さ　B：はじめの位置に戻す', '右トリガー：メジャー　右グリップ：狙って離すと移動', 'X：杭合わせ（①②杭 ③道路で高さ）入／切　Y：表示を消す'];
+  t.forEach((s, i) => fitText(c, s, 28, 258 + i * 42, 24, 590));
   hudTex.needsUpdate = true;
 }
 drawHud();
@@ -623,7 +671,7 @@ function onTrigger(hand) {
     const w = modelToWorld(new THREE.Vector3(STAKE.SW.x, 0, STAKE.SW.z));
     rig.position.x += p.x - w.x; rig.position.z += p.z - w.z;
     state.stakeStep = 1;
-  } else {
+  } else if (state.stakeStep === 1) {
     // SW を軸に回して、SE の方向をこの点に向ける
     const sw = modelToWorld(STAKE.SW.clone());
     const cur = modelToWorld(STAKE.SE.clone()).sub(sw); cur.y = 0;
@@ -632,7 +680,15 @@ function onTrigger(hand) {
     rig.rotation.y += da;
     const swAfter = modelToWorld(STAKE.SW.clone());
     rig.position.x += sw.x - swAfter.x; rig.position.z += sw.z - swAfter.z;
-    state.stakeStep = 0; state.stakeMode = false;
+    state.stakeStep = 2; state.stakeErr = false;   // 続けて③高さ合わせ（X で省略）
+  } else {
+    // ③ 道路の路面（配置図：北の私道 GL−150、西の公道は北端 GL−150〜南端 GL−500）を基準に高さを合わせる
+    const m = rig.worldToLocal(p.clone());
+    let ry = null;
+    if (m.z < -5.445) ry = -0.15;                 // 北の私道
+    else if (m.x < -7.9095) ry = roadLevel(m.z);  // 西の公道（北から南へ下がる。途中は直線と仮定）
+    if (ry == null) { state.stakeErr = true; }
+    else { rig.position.y = p.y - ry; state.stakeStep = 0; state.stakeMode = false; state.stakeErr = false; }
   }
   drawHud();
 }
@@ -925,7 +981,7 @@ function updateInside(dt) {
   }
 }
 
-window._dbg = { ext, makeSheet, vpCamera, renderFrame, updateSee, sunDir, setVariant, setHeight, goVP, sunState, setHour, applySun, placeSun, composer, furn, enterInside, exitInside, inside, rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
+window._dbg = { renderer, drawHud, hudCanvas, postureOf, ext, makeSheet, vpCamera, renderFrame, updateSee, sunDir, setVariant, setHeight, goVP, sunState, setHour, applySun, placeSun, composer, furn, enterInside, exitInside, inside, rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
 let hudTimer = 0;
 function drawHudThrottled() { const n = performance.now(); if (n - hudTimer > 150) { hudTimer = n; drawHud(); } }
 </script>
