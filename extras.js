@@ -328,12 +328,16 @@ export function initExtras(ctx) {
     [-0.45, C2, 0.9, 140], [-3.4, C2, 1.8, 140],                                                                             // 2階
     [-3.9, C1, -3.2, 90],                                                                                                    // ポーチ
   ];
+  const voidLights = [];   // 吹抜けの天井の照明（通常／ハーフで高さを変える）
   for (const [x, y, z, cd] of LIGHTS) {
     const l = new THREE.PointLight(0xffe2bd, cd * LIGHT_K, 0, 2); l.position.set(x, y - 0.06, z); lights.add(l);
     const f = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.012, 16), fixtureM); f.position.set(x, y + 0.004, z); fixtures.add(f);
+    if (y === CV && x > 1.5) voidLights.push([l, f]);   // 2階の照明（x<0）は動かさない
     if (y < C1 - 0.1) { const cord = boxAt(new THREE.MeshStandardMaterial({ color: 0x222222 }), x - 0.004, x + 0.004, y, C1, z - 0.004, z + 0.004); fixtures.add(cord); const sh = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.18, 24, 1, true), new THREE.MeshStandardMaterial({ color: 0x2a2a2a, side: THREE.DoubleSide })); sh.position.set(x, y + 0.04, z); fixtures.add(sh); }
   }
   const street = new THREE.PointLight(0xfff0d8, 70, 0, 2); street.position.set(ROAD.WW + 1.25, 4.9, 0.6); lights.add(street);
+
+  ext.setVoidCeil = (hFL) => { const y = FL1 + hFL - 0.01; for (const [l, f] of voidLights) { l.position.y = y - 0.06; f.position.y = y + 0.004; } ext.invalidate && ext.invalidate(); };
 
   let night = false;
   ext.isNight = () => night;
@@ -480,7 +484,7 @@ export function initExtras(ctx) {
     for (const v of (ctx.vars || ['A', 'B'])) {
       let col = 0;
       for (const h of ['20', '22', '24']) {
-        const key = v + '_' + h; await ctx.loadModel(key);
+        const key = ctx.keyOf(v, h); await ctx.loadModel(key);
         for (const k in models) models[k].visible = k === key;
         ext.setCurtain(null, +h / 10);
         ctx.render();
@@ -494,7 +498,7 @@ export function initExtras(ctx) {
     // 元に戻す
     renderer.setPixelRatio(old.pr); renderer.setSize(old.size.x, old.size.y); ctx.composer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); ctx.composer.setSize(old.size.x, old.size.y);
     camera.position.copy(old.pos); camera.quaternion.copy(old.q); camera.fov = old.fov; camera.aspect = old.aspect; camera.updateProjectionMatrix();
-    for (const k in models) models[k].visible = k === old.v + '_' + old.h;
+    for (const k in models) models[k].visible = k === ctx.keyOf(old.v, old.h);
     ext.setCurtain(null, +old.h / 10);
     return sheet;
   };

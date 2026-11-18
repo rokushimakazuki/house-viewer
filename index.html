@@ -66,13 +66,19 @@
 <div id="ui">
   <button id="hide">隠す</button>
   <h1>家の実物大ビュー</h1>
-  <p class="sub">吹抜けの高窓 2案の比較用。Meta Quest 3 のブラウザで開くと、実物大で見られます。</p>
+  <p class="sub">吹抜け（通常・ハーフ）と高窓 2案の比較用。Meta Quest 3 のブラウザで開くと、実物大で見られます。</p>
   <p class="sub" style="margin-top:-6px"><a href="ar.html" style="color:var(--accent);font-weight:600">▶ iPhone・iPadでARで見る（6通り）</a></p>
 
   <div class="lbl">吹抜けの高窓</div>
   <div class="row" id="vars">
     <button data-v="A" class="on">A 低いFIX×2</button>
     <button data-v="B">B 少し上のFIX×2</button>
+  </div>
+
+  <div class="lbl">吹抜けの天井（1階の床から）</div>
+  <div class="row" id="voids">
+    <button data-f="full" class="on">通常 約5.4m</button>
+    <button data-f="half">ハーフ 約3.9m</button>
   </div>
 
   <div class="lbl">リビングの大きい窓の高さ（床から上端まで）</div>
@@ -160,6 +166,7 @@
   <div class="row">
     <select id="vp"></select>
     <button data-v="A" class="on">A</button><button data-v="B">B</button>
+    <button data-f="full" class="on">吹抜け通常</button><button data-f="half">ハーフ</button>
     <button id="wide" title="画角を切り替える">標準</button>
   </div>
   <div class="row">
@@ -211,9 +218,11 @@ const STARTS = {
   stake:{ p: new THREE.Vector3(-7.9095, 0, 6.3), d: new THREE.Vector3(1, 0, -0.4).normalize(), y: 0, name: '杭合わせ' },
 };
 const VAR_NAME = { A: 'A 低いFIX×2', B: 'B 少し上のFIX×2', C: 'C 横長FIX' };
+const VOID_CEIL = { full: 5.4, half: 3.9 };   // 吹抜けの天井（1階床から m）。ハーフは 11/13 上野さん回答の約3.9m
+const VOID_NAME = { full: '吹抜け通常', half: 'ハーフ吹抜け' };
 
 const VARS = ['A', 'B'];   // 案C（横長FIX）は準防火地域で無理なので外した（11/15）
-const state = { v: 'A', h: '22', start: 'out', stakeMode: false, stakeStep: 0, help: true };
+const state = { v: 'A', f: 'full', h: '22', start: 'out', stakeMode: false, stakeStep: 0, help: true };
 const $ = (s) => document.querySelector(s);
 const msg = (t) => { $('#msg').textContent = t; };
 
@@ -438,7 +447,7 @@ const nbr = new THREE.Group(); rig.add(nbr);
 function renderFrame() { if (!renderer.xr.isPresenting && aoOn) composer.render(); else renderer.render(scene, camera); }
 ext = initExtras({
   scene, rig, renderer, camera, composer, models, furn, nbr, NEIGHBORS, ground, state, tex, vars: VARS,
-  loadModel: (k) => loadModel(k), curKey: () => curKey(), render: renderFrame,
+  loadModel: (k) => loadModel(k), curKey: () => curKey(), keyOf: (v, h) => keyOf(v, h), render: renderFrame,
   onNight: () => { applyBackground(); renderer.toneMappingExposure = ext.isNight() ? 1.0 : 1.1; applySun(); },
 });
 const nbrChk = document.querySelector('#nbrchk');
@@ -496,7 +505,8 @@ addEventListener('resize', () => {
 // ---- 読み込み ----
 const loader = new GLTFLoader();
 const loading = {};
-const curKey = () => state.v + '_' + state.h;
+const keyOf = (v, h) => v + '_' + h + (state.f === 'half' ? '_half' : '');
+const curKey = () => keyOf(state.v, state.h);
 function loadModel(k) {
   if (!loading[k]) loading[k] = new Promise((res, rej) => loader.load(`${k}.glb`, (g) => {
     prepModel(g.scene); if (furnOK) hideBoxFurniture(g.scene);
@@ -515,7 +525,7 @@ async function showCurrent() {
 showCurrent().then(async () => {
   loadFurniture();
   // 残りの組み合わせを裏で読んでおく（切り替えを速くする）
-  (async () => { for (const v of VARS) for (const h of ['20', '22', '24']) await loadModel(v + '_' + h).catch(() => {}); })();
+  (async () => { for (const f of ['', '_half']) for (const v of VARS) for (const h of ['20', '22', '24']) await loadModel(v + '_' + h + f).catch(() => {}); })();
   const ar = navigator.xr && await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
   const vr = navigator.xr && await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
   $('#ar').disabled = !ar; $('#vr').disabled = !vr;
@@ -528,6 +538,12 @@ function setVariant(v) {
   document.querySelectorAll('#vars button, #bar button[data-v]').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
   drawHud(); if (inside.on) { label(); updateSee(); }
 }
+function setVoid(f) {
+  state.f = f; showCurrent(); ext.setVoidCeil(VOID_CEIL[f]);
+  document.querySelectorAll('button[data-f]').forEach((b) => b.classList.toggle('on', b.dataset.f === f));
+  drawHud(); if (inside.on) { label(); updateSee(); }
+}
+document.querySelectorAll('button[data-f]').forEach((b) => b.onclick = () => setVoid(b.dataset.f));
 function setHeight(h) {
   state.h = h; showCurrent(); ext.setCurtain(null, +h / 10);
   document.querySelectorAll('button[data-h]').forEach((b) => b.classList.toggle('on', b.dataset.h === h));
@@ -621,7 +637,7 @@ function drawHud() {
   c.clearRect(0, 0, 640, 470);
   c.fillStyle = 'rgba(20,22,24,0.82)'; c.beginPath(); c.roundRect(0, 0, 640, 470, 28); c.fill();
   c.fillStyle = '#fff'; c.font = 'bold 40px sans-serif';
-  fitText(c, '案 ' + VAR_NAME[state.v] + '／窓' + (state.h / 10).toFixed(1) + 'm', 28, 60, 40, 590, true);
+  fitText(c, '案' + state.v + '・' + VOID_NAME[state.f] + '／窓' + (state.h / 10).toFixed(1) + 'm', 28, 60, 40, 590, true);
   c.font = '28px sans-serif'; c.fillStyle = '#ffb27a';
   let line3 = '', line4 = '', poseKind = null;
   let line2 = '家の高さ ' + (rig.position.y >= 0 ? '+' : '') + rig.position.y.toFixed(2) + ' m';
@@ -647,7 +663,7 @@ function drawHud() {
   if (poseKind) drawPose(c, poseKind, 575, 168);
   c.fillStyle = '#ffe08a'; fitText(c, '日差し ' + sunLabel(), 28, 214, 25, 590);
   c.fillStyle = '#d9dde0'; c.font = '24px sans-serif';
-  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝家ごと上下（押込＝+1時間）', 'A：案を切替　左グリップ：窓の高さ　B：はじめの位置に戻す', '右トリガー：メジャー　右グリップ：狙って離すと移動', 'X：敷地合わせ（①②境界標 ③道路で高さ）入／切　Y：表示を消す'];
+  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝家ごと上下（押込＝+1時間）', 'A：案と吹抜けを順に切替　左グリップ：窓の高さ　B：はじめの位置へ', '右トリガー：メジャー　右グリップ：狙って離すと移動', 'X：敷地合わせ（①②境界標 ③道路で高さ）入／切　Y：表示を消す'];
   t.forEach((s, i) => fitText(c, s, 28, 258 + i * 42, 24, 590));
   hudTex.needsUpdate = true;
 }
@@ -759,7 +775,7 @@ renderer.setAnimationLoop((t, frame) => {
         if (edge(0)) { if (state.stakeMode) onTrigger('right'); else ext.measureClick(); }
         teleHeld = !!pressed[1];
         if (was[1] && !pressed[1]) { ext.teleport(head); drawHud(); }                       // 右グリップを離す
-        if (edge(4)) setVariant({ A: 'B', B: 'A' }[state.v]);                       // A
+        if (edge(4)) { if (state.v === 'A') setVariant('B'); else { setVariant('A'); setVoid(state.f === 'full' ? 'half' : 'full'); } }   // A：A通常→B通常→Aハーフ→Bハーフ
         if (edge(5)) resetPlacement();                                                        // B
         if (edge(3)) { setHour(sunState.hour >= 17 ? 7 : Math.floor(sunState.hour) + 1); drawHud(); }   // 右スティック押し込み
       }
@@ -809,9 +825,9 @@ async function updateSee() {
     if (my !== seeSeq) return;
     rows.push(`<span${h === state.h ? ' style="color:var(--accent);font-weight:600"' : ''}>${(h / 10).toFixed(1)}m ${Math.round(r.floor * 100)}%／${Math.round(r.head * 100)}%</span>`);
   }
-  el.innerHTML = '<b>ここから見えるリビング</b>（床／座った人の顔・案' + state.v + ($('#curt').checked ? '・カーテン閉' : '') + '）<br>リビングの窓 ' + rows.join('　');
+  el.innerHTML = '<b>ここから見えるリビング</b>（床／座った人の顔・案' + state.v + '・' + VOID_NAME[state.f] + ($('#curt').checked ? '・カーテン閉' : '') + '）<br>リビングの窓 ' + rows.join('　');
 }
-function label() { $('#vpname').textContent = VPS[inside.vp].name + '・' + (seated() ? '座った目線' : '立った目線') + '・案' + state.v + '・リビング窓' + (state.h / 10).toFixed(1) + 'm'; }
+function label() { $('#vpname').textContent = VPS[inside.vp].name + '・' + (seated() ? '座った目線' : '立った目線') + '・案' + state.v + '・' + VOID_NAME[state.f] + '・リビング窓' + (state.h / 10).toFixed(1) + 'm'; }
 // 比較画像の立ち位置
 const SHEET_VPS = ['sofa', 'dining', 'garden', 'nbr_g', 'nbr_2f', 'road_w'];
 for (const k of SHEET_VPS) { const o = document.createElement('option'); o.value = k; o.textContent = VPS[k].name + (VPS[k].out ? '' : '（座った目線）'); $('#sheetvp').append(o); }
@@ -820,7 +836,7 @@ function vpCamera(k, sit = true) {
   return { eye: [v.p[0], y, v.p[1]], yaw: heading(new THREE.Vector3(v.d[0], 0, v.d[1])), pitch: THREE.MathUtils.degToRad(v.pitch) };
 }
 async function makeSheet(k) {
-  const title = VPS[k].name + '　' + SEASON_NAME[sunState.season] + ' ' + document.querySelector('.sunrow .t').textContent + (ext.isNight() ? '（夜）' : '') + ($('#curt').checked ? '・カーテン閉' : '');
+  const title = VPS[k].name + '　' + SEASON_NAME[sunState.season] + ' ' + document.querySelector('.sunrow .t').textContent + (ext.isNight() ? '（夜）' : '') + ($('#curt').checked ? '・カーテン閉' : '') + '・' + VOID_NAME[state.f];
   const wasInside = inside.on; if (wasInside) exitInside();
   const sheet = await ext.makeSheet(vpCamera(k), title);
   if (wasInside) { enterInside(); }
@@ -842,7 +858,7 @@ $('#daytbl').onclick = async () => {
   const b = $('#daytbl'), out = $('#daytblout'); b.disabled = true;
   const res = {}; let best = 0;
   for (const v of VARS) for (const h of ['20', '22', '24']) {
-    const k = v + '_' + h; out.textContent = '計算中… ' + k.replace('_', '・窓'); await loadModel(k);
+    const k = keyOf(v, h); out.textContent = '計算中… ' + v + '・窓' + h; await loadModel(k);
     await new Promise((r) => setTimeout(r, 0));
     let sum = 0; const dir = new THREE.Vector3();
     for (let t = 8; t <= 16.001; t += 1) sum += ext.sunArea(k, sunDir(12, 22, t, dir));   // 1時間おき
@@ -850,8 +866,8 @@ $('#daytbl').onclick = async () => {
   }
   const cell = (k) => `<td class="${res[k] >= best - 0.05 ? 'best' : ''}">${res[k].toFixed(1)}</td>`;
   out.innerHTML = '<table class="num"><tr><th>案＼リビングの窓</th><th>2.0m</th><th>2.2m</th><th>2.4m</th></tr>' +
-    VARS.map((v) => `<tr><td>${v}</td>${cell(v + '_20')}${cell(v + '_22')}${cell(v + '_24')}</tr>`).join('') + '</table>' +
-    `<span style="color:var(--sub)">冬至の8〜16時（1時間おき）に、LDK＋和室の床に日が当たる量（㎡×時間）。周りの家${nbrChk.checked ? 'あり' : 'なし'}・南の隣地 ${slopeDH().toFixed(1)}m 低い・カーテン${$('#curt').checked ? '閉' : '開'}で計算。</span>`;
+    VARS.map((v) => `<tr><td>${v}</td>${cell(keyOf(v, '20'))}${cell(keyOf(v, '22'))}${cell(keyOf(v, '24'))}</tr>`).join('') + '</table>' +
+    `<span style="color:var(--sub)">${VOID_NAME[state.f]}。冬至の8〜16時（1時間おき）に、LDK＋和室の床に日が当たる量（㎡×時間）。周りの家${nbrChk.checked ? 'あり' : 'なし'}・南の隣地 ${slopeDH().toFixed(1)}m 低い・カーテン${$('#curt').checked ? '閉' : '開'}で計算。</span>`;
   b.disabled = false;
 };
 function goVP(k) {
