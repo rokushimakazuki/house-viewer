@@ -38,6 +38,8 @@
   #bar .sunrow { flex:1; min-width:0; }
   #bar .sunrow select { flex:0 0 auto; }
   #bar button { padding:9px 11px; font-size:14px; }
+  #bar .grp { display:inline-flex; gap:6px; align-items:center; }
+  #bar .grp > span { font-size:13px; color:var(--sub); white-space:nowrap; }
   #bar select { font:inherit; font-size:15px; flex:1; min-width:0; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--fg); padding:8px; }
   #bar .mv { flex:1; font-size:18px; touch-action:none; user-select:none; -webkit-user-select:none; }
   #vpname { position:fixed; top:max(12px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%); display:none; max-width:calc(100% - 24px);
@@ -70,10 +72,10 @@
   <p class="sub" style="margin-top:-6px"><a href="ar.html" style="color:var(--accent);font-weight:600">▶ iPhone・iPadでARで見る（18通り）</a></p>
   <p class="sub" style="margin-top:-6px"><a href="s.html" style="color:var(--accent);font-weight:600">▶ 手描き案（11/19・吹抜けなしの別の間取り）を見る</a></p>
 
-  <div class="lbl">吹抜けの高窓</div>
+  <div class="lbl">吹抜けの高窓の高さ（2階の床から窓の上端まで）</div>
   <div class="row" id="vars">
-    <button data-v="A" class="on">A 低いFIX×2</button>
-    <button data-v="B">B 少し上のFIX×2</button>
+    <button data-v="A" class="on">A 低め 0.5m</button>
+    <button data-v="B">B 高め 0.9m</button>
   </div>
 
   <div class="lbl">吹抜けの天井（1階の床から）</div>
@@ -146,7 +148,7 @@
       <tr><td>左スティック</td><td>歩く（家の中・外を移動）</td></tr>
       <tr><td>右スティック 左右</td><td>向きを変える</td></tr>
       <tr><td>右スティック 上下</td><td>家・周りの家・地面をまとめて上げ下げ（床合わせ／手前に倒すと脚立に乗ったのと同じ）。手元に「目の高さ：床から ○m」と窓の上端との差が出る</td></tr>
-      <tr><td>A ボタン</td><td>案を切り替え A⇄B</td></tr>
+      <tr><td>A ボタン</td><td>高窓の高さ（A 低め⇄B 高め）と吹抜けを順に切り替え</td></tr>
       <tr><td>B ボタン</td><td>はじめの位置に戻す（今いる場所・向きが基準）</td></tr>
       <tr><td>X ボタン</td><td>敷地合わせモード 入／切（敷地で AR のときに使う）</td></tr>
       <tr><td>右トリガー</td><td>（敷地合わせ中）①南西の角の境界標（画面では緑の印）の中心に右手の先を当てて押す → ②南東の角の境界標（黄色の印）で押す → ③道路の路面に当てて押す＝高さを道路に合わせる（北の私道 GL−150 がおすすめ。X で省略）。①②は水平の位置だけ、高さは③で決まる</td></tr>
@@ -167,13 +169,12 @@
   <button id="barmin" title="操作をたたむ">▼ たたむ</button>
   <div class="row">
     <select id="vp"></select>
-    <button data-v="A" class="on">A</button><button data-v="B">B</button>
     <button data-f="full" class="on">吹抜け通常</button><button data-f="half">ハーフ</button><button data-f="flat">なし</button>
     <button id="wide" title="画角を切り替える">標準</button>
   </div>
   <div class="row">
-    <span style="font-size:13px;color:var(--sub);align-self:center">リビングの窓</span>
-    <button data-h="20">2.0m</button><button data-h="22" class="on">2.2m</button><button data-h="24">2.4m</button>
+    <span class="grp" id="grpv"><span>高窓の高さ</span><button data-v="A" class="on">A 低め</button><button data-v="B">B 高め</button></span>
+    <span class="grp"><span>リビングの窓</span><button data-h="20">2.0m</button><button data-h="22" class="on">2.2m</button><button data-h="24">2.4m</button></span>
   </div>
   <div class="row">
     <button id="pose">座る</button>
@@ -219,7 +220,7 @@ const STARTS = {
   sofa: { p: new THREE.Vector3(1.0, 0, -1.2), d: new THREE.Vector3(2.2, 0, 3.6).normalize(), y: -FL1, name: 'リビング' },
   stake:{ p: new THREE.Vector3(-7.9095, 0, 6.3), d: new THREE.Vector3(1, 0, -0.4).normalize(), y: 0, name: '杭合わせ' },
 };
-const VAR_NAME = { A: 'A 低いFIX×2', B: 'B 少し上のFIX×2', C: 'C 横長FIX' };
+const VAR_NAME = { A: '高窓A（低め）', B: '高窓B（高め）', C: 'C 横長FIX' };
 const VOID_CEIL = { full: 5.4, half: 3.9, flat: 2.4 };   // 吹抜けの天井（1階床から m）。ハーフは 11/13 上野さん回答の約3.9m
 const VOID_NAME = { full: '吹抜け通常', half: 'ハーフ吹抜け', flat: '吹抜けなし' };
 const VOID_NEXT = { full: 'half', half: 'flat', flat: 'full' };
@@ -640,7 +641,7 @@ function drawHud() {
   c.clearRect(0, 0, 640, 470);
   c.fillStyle = 'rgba(20,22,24,0.82)'; c.beginPath(); c.roundRect(0, 0, 640, 470, 28); c.fill();
   c.fillStyle = '#fff'; c.font = 'bold 40px sans-serif';
-  fitText(c, '案' + state.v + '・' + VOID_NAME[state.f] + '／窓' + (state.h / 10).toFixed(1) + 'm', 28, 60, 40, 590, true);
+  fitText(c, VAR_NAME[state.v] + '・' + VOID_NAME[state.f] + '／リビング窓' + (state.h / 10).toFixed(1) + 'm', 28, 60, 40, 590, true);
   c.font = '28px sans-serif'; c.fillStyle = '#ffb27a';
   let line3 = '', line4 = '', poseKind = null;
   let line2 = '家の高さ ' + (rig.position.y >= 0 ? '+' : '') + rig.position.y.toFixed(2) + ' m';
@@ -666,7 +667,7 @@ function drawHud() {
   if (poseKind) drawPose(c, poseKind, 575, 168);
   c.fillStyle = '#ffe08a'; fitText(c, '日差し ' + sunLabel(), 28, 214, 25, 590);
   c.fillStyle = '#d9dde0'; c.font = '24px sans-serif';
-  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝家ごと上下（押込＝+1時間）', 'A：案と吹抜けを順に切替　左グリップ：窓の高さ　B：はじめの位置へ', '右トリガー：メジャー　右グリップ：狙って離すと移動', 'X：敷地合わせ（①②境界標 ③道路で高さ）入／切　Y：表示を消す'];
+  const t = ['左スティック：歩く（押し込み＝季節）', '右スティック：左右＝向き／上下＝家ごと上下（押込＝+1時間）', 'A：高窓と吹抜けを順に切替　左グリップ：リビング窓の高さ　B：はじめの位置へ', '右トリガー：メジャー　右グリップ：狙って離すと移動', 'X：敷地合わせ（①②境界標 ③道路で高さ）入／切　Y：表示を消す'];
   t.forEach((s, i) => fitText(c, s, 28, 258 + i * 42, 24, 590));
   hudTex.needsUpdate = true;
 }
@@ -828,9 +829,9 @@ async function updateSee() {
     if (my !== seeSeq) return;
     rows.push(`<span${h === state.h ? ' style="color:var(--accent);font-weight:600"' : ''}>${(h / 10).toFixed(1)}m ${Math.round(r.floor * 100)}%／${Math.round(r.head * 100)}%</span>`);
   }
-  el.innerHTML = '<b>ここから見えるリビング</b>（床／座った人の顔・案' + state.v + '・' + VOID_NAME[state.f] + ($('#curt').checked ? '・カーテン閉' : '') + '）<br>リビングの窓 ' + rows.join('　');
+  el.innerHTML = '<b>ここから見えるリビング</b>（床／座った人の顔・' + VAR_NAME[state.v] + '・' + VOID_NAME[state.f] + ($('#curt').checked ? '・カーテン閉' : '') + '）<br>リビングの窓 ' + rows.join('　');
 }
-function label() { $('#vpname').textContent = VPS[inside.vp].name + '・' + (seated() ? '座った目線' : '立った目線') + '・案' + state.v + '・' + VOID_NAME[state.f] + '・リビング窓' + (state.h / 10).toFixed(1) + 'm'; }
+function label() { $('#vpname').textContent = VPS[inside.vp].name + '・' + (seated() ? '座った目線' : '立った目線') + '・' + VAR_NAME[state.v] + '・' + VOID_NAME[state.f] + '・リビング窓' + (state.h / 10).toFixed(1) + 'm'; }
 // 比較画像の立ち位置
 const SHEET_VPS = ['sofa', 'dining', 'garden', 'nbr_g', 'nbr_2f', 'road_w'];
 for (const k of SHEET_VPS) { const o = document.createElement('option'); o.value = k; o.textContent = VPS[k].name + (VPS[k].out ? '' : '（座った目線）'); $('#sheetvp').append(o); }
@@ -868,8 +869,8 @@ $('#daytbl').onclick = async () => {
     res[k] = sum; best = Math.max(best, sum);
   }
   const cell = (k) => `<td class="${res[k] >= best - 0.05 ? 'best' : ''}">${res[k].toFixed(1)}</td>`;
-  out.innerHTML = '<table class="num"><tr><th>案＼リビングの窓</th><th>2.0m</th><th>2.2m</th><th>2.4m</th></tr>' +
-    VARS.map((v) => `<tr><td>${v}</td>${cell(keyOf(v, '20'))}${cell(keyOf(v, '22'))}${cell(keyOf(v, '24'))}</tr>`).join('') + '</table>' +
+  out.innerHTML = '<table class="num"><tr><th>高窓＼リビングの窓</th><th>2.0m</th><th>2.2m</th><th>2.4m</th></tr>' +
+    VARS.map((v) => `<tr><td>${VAR_NAME[v]}</td>${cell(keyOf(v, '20'))}${cell(keyOf(v, '22'))}${cell(keyOf(v, '24'))}</tr>`).join('') + '</table>' +
     `<span style="color:var(--sub)">${VOID_NAME[state.f]}。冬至の8〜16時（1時間おき）に、LDK＋和室の床に日が当たる量（㎡×時間）。周りの家${nbrChk.checked ? 'あり' : 'なし'}・南の隣地 ${slopeDH().toFixed(1)}m 低い・カーテン${$('#curt').checked ? '閉' : '開'}で計算。</span>`;
   b.disabled = false;
 };

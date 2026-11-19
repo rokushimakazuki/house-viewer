@@ -479,7 +479,7 @@ export function initExtras(ctx) {
     renderer.setPixelRatio(1); renderer.setSize(CW, CH, false); ctx.composer.setPixelRatio(1); ctx.composer.setSize(CW, CH);
     camera.aspect = CW / CH; camera.fov = 70; camera.updateProjectionMatrix();
     camera.position.set(...vp.eye); camera.rotation.set(vp.pitch, vp.yaw, 0, 'YXZ');
-    const VN = { A: 'A 低いFIX×2', B: 'B 少し上のFIX×2', C: 'C 横長FIX' };
+    const VN = { A: '高窓A（低め）', B: '高窓B（高め）', C: 'C 横長FIX' };
     let row = 0;
     for (const v of (ctx.vars || ['A', 'B'])) {
       let col = 0;
