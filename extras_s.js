@@ -2,6 +2,7 @@
 // 座標はすべてモデル座標（m）：X＝東、Z＝南、Y＝敷地の地面(GL)からの高さ。1階の床は +0.59
 import * as THREE from 'three';
 import { computeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
+import { buildAround } from './around.js';
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
@@ -147,7 +148,7 @@ export function initExtras(ctx) {
   }
   buildVar();
 
-  // ブロック1段＋メッシュフェンス（南・東の境界。配置図）
+  // ブロック1段＋メッシュフェンス（南の境界。配置図）。東の境界は隣のブロック塀とフェンスが今あるので、around.js の側で作る
   const fence = new THREE.Group(); site.add(fence);
   function fenceRun(ax, az, bx, bz) {
     const L = Math.hypot(bx - ax, bz - az), dx = (bx - ax) / L, dz = (bz - az) / L, ang = Math.atan2(-dz, dx);
@@ -162,7 +163,6 @@ export function initExtras(ctx) {
     fence.add(seg);
   }
   fenceRun(LOT.W, LOT.S - 0.06, LOT.E - 0.06, LOT.S - 0.06);
-  fenceRun(LOT.E - 0.06, LOT.S - 0.06, LOT.E - 0.06, LOT.N);
   shadow(fence);
 
   // 植栽（配置図の丸 3 本：南西・南東・北東）と庭のテーブル
@@ -200,89 +200,9 @@ export function initExtras(ctx) {
   ext.site = site;
   ext.setSlope = (dh) => { DH = dh; buildVar(); ext.invalidate(); };
 
-  // ---------------- 周りの家（外観：窓・色・軒） ----------------
-  const PALETTE = [['#e9e3d6', '#3e4246'], ['#d6cfc3', '#4b3a2f'], ['#f0efea', '#2f3a48'], ['#cbc3b4', '#3b3d40'], ['#e3dccd', '#5a4636'], ['#dfe1de', '#363a3e']];
-  const EAVE = 5.8, RIDGE = 7.6, H = EAVE + 3, TILE = 3.64;
+  // ---------------- 周りの家・塀・生け垣・木（around.js。データは around_data.js：11/19 の現地写真と地図から） ----------------
   const nightMats = [];
-  function facadeTex(seed, wallCol) {
-    const r = rng(seed), pxm = 512 / TILE, pym = 1024 / H;
-    const y = (m) => (H - (m + 3)) * pym;   // 高さ m → 絵の y
-    const wins = [];
-    for (const [y0, y1, p] of [[0.9, 2.0, 0.75], [3.7, 4.8, 0.8]]) {
-      if (r() > p) continue;
-      const w = 0.8 + r() * 0.9, x0 = 0.3 + r() * (TILE - 0.6 - w);
-      wins.push([x0, x0 + w, y0, y1, r() < 0.55]);
-    }
-    const map = canvasTex(512, 1024, (g, W) => {
-      g.fillStyle = wallCol; g.fillRect(0, 0, W, 1024);
-      g.strokeStyle = 'rgba(0,0,0,0.06)'; g.lineWidth = 1;
-      for (let m = 0.4; m < EAVE; m += 0.455) { g.beginPath(); g.moveTo(0, y(m)); g.lineTo(W, y(m)); g.stroke(); }
-      g.fillStyle = '#8f8d88'; g.fillRect(0, y(0.4), W, 1024 - y(0.4));                // 基礎
-      g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, y(EAVE), W, y(EAVE - 0.25) - y(EAVE)); // 軒下の陰
-      for (const [x0, x1, y0, y1] of wins) {
-        g.fillStyle = '#dcdcd8'; g.fillRect(x0 * pxm - 4, y(y1) - 4, (x1 - x0) * pxm + 8, (y1 - y0) * pym + 8);
-        const gr = g.createLinearGradient(0, y(y1), 0, y(y0)); gr.addColorStop(0, '#3c4852'); gr.addColorStop(1, '#232a30');
-        g.fillStyle = gr; g.fillRect(x0 * pxm, y(y1), (x1 - x0) * pxm, (y1 - y0) * pym);
-        g.fillStyle = '#c9c9c5'; g.fillRect((x0 + x1) / 2 * pxm - 2, y(y1), 4, (y1 - y0) * pym);
-        g.fillStyle = '#4a4d50'; g.fillRect(x0 * pxm - 6, y(y1 + 0.22), (x1 - x0) * pxm + 12, 0.2 * pym);   // シャッターボックス
-      }
-    }, { rep: null });
-    map.repeat.set(1, 1);
-    const em = canvasTex(256, 512, (g, W) => {
-      g.fillStyle = '#000'; g.fillRect(0, 0, W, 512);
-      for (const [x0, x1, y0, y1, lit] of wins) if (lit) { g.fillStyle = '#ffcf8f'; g.fillRect(x0 * pxm / 2, y(y1) / 2, (x1 - x0) * pxm / 2, (y1 - y0) * pym / 2); }
-    });
-    return { map, em };
-  }
-  function buildNeighbors() {
-    nbr.clear();
-    NEIGHBORS.forEach((h, idx) => {
-      const pts = h.c.map(([x, y]) => new THREE.Vector2(PX(x), PZ(y)));
-      // 時計回りに揃える（外向きの面にするため）
-      const area = pts.reduce((a, p, i) => { const q = pts[(i + 1) % pts.length]; return a + (p.x * q.y - q.x * p.y); }, 0);
-      if (area < 0) pts.reverse();
-      const [wallCol, roofCol] = PALETTE[idx % PALETTE.length];
-      const { map, em } = facadeTex(100 + idx, wallCol);
-      const wallM = new THREE.MeshStandardMaterial({ map, roughness: 0.9, emissiveMap: em, emissive: 0xffffff, emissiveIntensity: 0 });
-      nightMats.push(wallM);
-      const pos = [], uv = [];
-      let s = 0;
-      for (let i = 0; i < pts.length; i++) {
-        const a = pts[i], b = pts[(i + 1) % pts.length], L = a.distanceTo(b);
-        const A0 = [a.x, -3, a.y], B0 = [b.x, -3, b.y], A1 = [a.x, EAVE, a.y], B1 = [b.x, EAVE, b.y];
-        const u0 = s / TILE, u1 = (s + L) / TILE;
-        pos.push(...A0, ...B1, ...B0, ...A0, ...A1, ...B1); uv.push(u0, 0, u1, 1, u1, 0, u0, 0, u0, 1, u1, 1);
-        s += L;
-      }
-      const wg = new THREE.BufferGeometry();
-      wg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); wg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); wg.computeVertexNormals();
-      // 外向きか確認（重心から離れる向き）して、逆なら裏返す
-      const cx = pts.reduce((a, q) => a + q.x, 0) / pts.length, cz = pts.reduce((a, q) => a + q.y, 0) / pts.length;
-      const n = wg.attributes.normal, p0 = wg.attributes.position;
-      if ((p0.getX(0) - cx) * n.getX(0) + (p0.getZ(0) - cz) * n.getZ(0) < 0) {
-        for (let i = 0; i < p0.count; i += 3) { for (const arr of [wg.attributes.position, wg.attributes.uv]) { const k = arr.itemSize; for (let c = 0; c < k; c++) { const t = arr.array[(i + 1) * k + c]; arr.array[(i + 1) * k + c] = arr.array[(i + 2) * k + c]; arr.array[(i + 2) * k + c] = t; } } }
-        wg.computeVertexNormals();
-      }
-      const wall = new THREE.Mesh(wg, wallM);
-      // 屋根：軒を 0.45m 出した四角すい
-      const R = pts.reduce((a, q) => a + Math.hypot(q.x - cx, q.y - cz), 0) / pts.length, k = 1 + 0.45 / R;
-      const ep = pts.map((q) => [cx + (q.x - cx) * k, cz + (q.y - cz) * k]);
-      const rp = [];
-      for (let i = 0; i < 4; i++) { const a = ep[i], b = ep[(i + 1) % 4]; rp.push(a[0], EAVE - 0.12, a[1], cx, RIDGE, cz, b[0], EAVE - 0.12, b[1]); }
-      const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3)); rg.computeVertexNormals();
-      const roof = new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ color: roofCol, roughness: 0.8, side: THREE.DoubleSide }));
-      // 雨どい（軒先の細い帯）
-      const gut = new THREE.Group();
-      for (let i = 0; i < 4; i++) {
-        const a = ep[i], b = ep[(i + 1) % 4], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        const m = new THREE.Mesh(new THREE.BoxGeometry(L, 0.1, 0.1), new THREE.MeshStandardMaterial({ color: 0x55585b, roughness: 0.6 }));
-        m.position.set((a[0] + b[0]) / 2, EAVE - 0.17, (a[1] + b[1]) / 2); m.rotation.y = Math.atan2(-(b[1] - a[1]), b[0] - a[0]); gut.add(m);
-      }
-      const g = new THREE.Group(); g.userData.cz = cz; g.userData.name = h.n; g.userData.south = !!h.south;
-      g.add(wall, roof, gut); shadow(g); nbr.add(g);
-    });
-  }
-  buildNeighbors();
+  { const a = buildAround({ nightMats }); nbr.add(a.south, a.fixed); }
 
   // ---------------- 室内：ラグ・テレビ台・カーテン・照明 ----------------
   const interior = new THREE.Group(); rig.add(interior);

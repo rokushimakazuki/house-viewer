@@ -118,7 +118,7 @@
     <input id="slope" type="range" min="0" max="1.5" step="0.1" value="0.5">
     <span class="t" id="slopet" style="min-width:9em">0.5m</span>
   </div>
-  <label class="chk"><input type="checkbox" id="nbrchk" checked>周りの家を出す（位置は航空写真から読んだ概算、窓と色は想像。ARでは消える）</label>
+  <label class="chk"><input type="checkbox" id="nbrchk" checked>周りの家・塀・木を出す（11/19 の現地写真と地図から。位置 ±0.5m・高さ ±0.4m の目安。ARでは消える）</label>
   <label class="chk"><input type="checkbox" id="sitechk" checked>外まわりを出す（道路・駐車場・フェンス・木・車。ARでは消える）</label>
   <label class="chk"><input type="checkbox" id="night">夜にする（照明をつける）</label>
   <label class="chk"><input type="checkbox" id="curt">リビングのカーテンを閉める</label>
@@ -161,7 +161,7 @@
     </table>
     <p class="sub" style="margin-top:8px">AR＝周りの景色の中に家が出る。VR＝周りは見えず、家と芝生だけ。家の中を見るときは、1階の床が足元に来るように置きます。</p>
   </details>
-  <p class="sub" style="margin:10px 0 0">素材：Poly Haven（CC0）。日差しは計算上の目安。周りの家の位置・大きさは ±1〜2m の概算で、窓の位置と色は想像です。南側の段差の留め方（擁壁）・駐車場の勾配も推測です。「中から見る」で外の立ち位置を選ぶと出る％は、吹抜けの下のリビングを25cm間隔の点で調べ、そこから遮られずに見える点の割合です。</p>
+  <p class="sub" style="margin:10px 0 0">素材：Poly Haven（CC0）。日差しは計算上の目安。周りの家・塀・木は、11/19 の現地写真と国土地理院の地図から作りました（近くの家は位置 ±0.5m・高さ ±0.4m の目安。遠くの家は輪郭だけ合わせ、2階建てと仮定）。南側の段差の留め方（擁壁）・駐車場の勾配も推測です。「中から見る」で外の立ち位置を選ぶと出る％は、吹抜けの下のリビングを25cm間隔の点で調べ、そこから遮られずに見える点の割合です。</p>
 </div>
 <button id="show">操作パネル</button>
 <div id="vpname"></div>
@@ -216,7 +216,7 @@ let ext = null;   // 追加機能（extras.js）
 const FL1 = 0.59;
 const STAKE = { SW: new THREE.Vector3(-7.9095, 0, 4.844), SE: new THREE.Vector3(6.1315, 0, 4.881) };
 const STARTS = {
-  out:  { p: new THREE.Vector3(0.6, 0, 9.5),  d: new THREE.Vector3(0, 0, -1), y: 0,    name: '家の外（南）' },
+  out:  { p: new THREE.Vector3(4.2, 0, 9.6),  d: new THREE.Vector3(-0.3, 0, -1).normalize(), y: 0,    name: '家の外（南）' },
   sofa: { p: new THREE.Vector3(1.0, 0, -1.2), d: new THREE.Vector3(2.2, 0, 3.6).normalize(), y: -FL1, name: 'リビング' },
   stake:{ p: new THREE.Vector3(-7.9095, 0, 6.3), d: new THREE.Vector3(1, 0, -0.4).normalize(), y: 0, name: '杭合わせ' },
 };
@@ -804,8 +804,8 @@ const VPS = {
   garden:  { name: '南の庭から（南西の角）', p: [-1.6, 4.5],  d: [1.0, -0.55], pitch: 16,  fl: 'g', out: true },
   // 外から中がどれだけ見えるか（目の高さ 1.5m で立った人）
   road_w:  { name: '西の道路から（通る人）', p: [-9.9, 5.6],  d: [12.8, -3.3], pitch: 2,   fl: () => roadLevel(5.6), out: true, see: true, eye: 1.5 },
-  nbr_g:   { name: '南の家の庭から',         p: [0.8, 6.3],   d: [0.5, -1],    pitch: 4,   fl: () => -slopeDH(), out: true, see: true, eye: 1.5 },
-  nbr_2f:  { name: '南の家の2階の窓から（窓の位置は想像）', p: [0.6, 9.5], d: [0.25, -1], pitch: -12, fl: () => -slopeDH() + 2.9, out: true, see: true, eye: 1.5 },
+  nbr_g:   { name: '南の家の庭から',         p: [1.8, 8.4],   d: [0.15, -1],   pitch: 4,   fl: () => -slopeDH(), out: true, see: true, eye: 1.5 },
+  nbr_2f:  { name: '南の家の2階の小窓から', p: [-3.43, 10.25], d: [0.56, -0.83], pitch: -12, fl: () => -slopeDH() + 3.05, out: true, see: true, eye: 1.5 },
 };
 const slopeDH = () => parseFloat($('#slope').value);
 const roadLevel = (z) => { const N = -5.445, S = 4.86, dh = slopeDH(); return z <= N ? -0.15 : z >= S ? -dh : -0.15 + (-dh + 0.15) * (z - N) / (S - N); };
