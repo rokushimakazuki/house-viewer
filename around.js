@@ -148,11 +148,11 @@ export function buildAround({ nightMats = [] } = {}) {
     // 上をでこぼこにする
     const r = rng(77 + Math.round(c[0][0] * 10)), x0 = Math.min(...c.map((p) => p[0])), x1 = Math.max(...c.map((p) => p[0])), z0 = Math.min(...c.map((p) => p[1])), z1 = Math.max(...c.map((p) => p[1]));
     const step = 1.1;
-    for (let x = x0 + 0.5; x < x1; x += step) for (let z = z0 + 0.5; z < z1; z += step) bat(o).blob('leaf|' + o.col, [x + (r() - 0.5) * 0.4, o.z1 - 0.45 + r() * 0.3, z + (r() - 0.5) * 0.4], 0.75, 0.7, r);
+    for (let x = x0 + 0.5; x < x1; x += step) for (let z = z0 + 0.5; z < z1; z += step) bat(o).blob('leaf|' + o.col, [x + (r() - 0.5) * 0.4, o.z1 - 0.5 + r() * 0.25, z + (r() - 0.5) * 0.4], 0.7, 0.6, r);
   }
 
   // ---- 木 ----
-  const LEAF = { ever: ['#1f3a26', '#27462c', '#1b3120'], shrub: ['#2f4a28', '#3a5630', '#44602f', '#586a34'], round: ['#2a4a28', '#32562e'], olive: ['#6f7f6a', '#7d8b76', '#62735e'], pollard: ['#6e6a3a', '#7a5a34', '#8a6a30'], bare: ['#6b5d50'] };
+  const LEAF = { ever: ['#1f3a26', '#27462c', '#1b3120'], shrub: ['#27402a', '#2f4a2c', '#39542d', '#4a5c30'], round: ['#243f26', '#2b4a2a'], olive: ['#6f7f6a', '#7d8b76', '#62735e'], pollard: ['#6a6440', '#74583a', '#5f5a3c'], bare: ['#6b5d50'] };
   A.tree.forEach((o, i) => {
     const B = bat(o), r = rng(500 + i * 13), x = MX(o.p[0]), z = MZ(o.p[1]), b = o.base || 0, h = o.h, R = o.r, cols = LEAF[o.kind] || LEAF.ever;
     const col = () => 'leaf|' + cols[Math.floor(r() * cols.length)];
@@ -162,7 +162,12 @@ export function buildAround({ nightMats = [] } = {}) {
     else if (o.kind === 'round') B.blob(col(), [x, b + h * 0.55, z], R, h * 0.5 / R, r);
     else if (o.kind === 'bare') { for (let k = 0; k < 5; k++) { const a = r() * 6.28, d = R * (0.3 + r() * 0.6); B.blob(col(), [x + Math.cos(a) * d, b + h * (0.6 + r() * 0.35), z + Math.sin(a) * d], 0.18, 2.2, r); } }
     else {
-      if (o.kind === 'olive') {   // 細かい葉のかたまりを散らす（枝ぶりが透けて見える木）
+      if (o.kind === 'pollard') {   // 大きなケヤキ：太い幹の上に、葉のかたまりがまばらに付く（晩秋）
+        for (let k = 0; k < 13; k++) {
+          const t = r(), a = k * 2.4 + r(), yy = b + h * (0.5 + 0.45 * t), d = R * (0.15 + 0.75 * r()) * Math.sin((0.15 + 0.8 * t) * Math.PI);
+          B.blob(col(), [x + Math.cos(a) * d, Math.min(yy, b + h - 0.8), z + Math.sin(a) * d], 0.9 + r() * 0.6, 0.75, r);
+        }
+      } else if (o.kind === 'olive') {   // 細かい葉のかたまりを散らす（枝ぶりが透けて見える木）
         for (let k = 0; k < 26; k++) {
           const t = r(), a = r() * 6.28, yy = b + h * (0.42 + 0.58 * t), d = R * Math.sqrt(r()) * (0.35 + 0.65 * Math.sin((0.15 + 0.85 * t) * Math.PI));
           B.blob(col(), [x + Math.cos(a) * d, Math.min(yy, b + h - 0.35), z + Math.sin(a) * d], 0.45 + r() * 0.3, 0.8, r);
@@ -181,7 +186,7 @@ export function buildAround({ nightMats = [] } = {}) {
   // ---- 高くなっている地面・電柱・物干し ----
   for (const o of A.ground) {
     const c = o.c.map(([x, y]) => [MX(x), MZ(y)]);
-    bat(o).prism('wall|' + (o.mat === 'conc' ? '#b9b5ad' : '#8d8371'), c, -0.4, o.z);
+    bat(o).prism('wall|' + (o.mat === 'conc' ? '#b9b5ad' : o.mat === 'weed' ? '#9d9066' : '#8d8371'), c, -0.4, o.z);
   }
   for (const o of A.pole) { const x = MX(o.p[0]), z = MZ(o.p[1]), t = 0.14; bat(o).prism('wall|#8b8880', [[x - t, z - t], [x + t, z - t], [x + t, z + t], [x - t, z + t]], -0.6, o.h); }
   for (const o of A.frame) {

@@ -805,7 +805,7 @@ const VPS = {
   // 外から中がどれだけ見えるか（目の高さ 1.5m で立った人）
   road_w:  { name: '西の道路から（通る人）', p: [-9.9, 5.6],  d: [12.8, -3.3], pitch: 2,   fl: () => roadLevel(5.6), out: true, see: true, eye: 1.5 },
   nbr_g:   { name: '南の家の庭から',         p: [1.8, 8.4],   d: [0.15, -1],   pitch: 4,   fl: () => -slopeDH(), out: true, see: true, eye: 1.5 },
-  nbr_2f:  { name: '南の家の2階の小窓から', p: [-3.43, 10.25], d: [0.56, -0.83], pitch: -12, fl: () => -slopeDH() + 3.05, out: true, see: true, eye: 1.5 },
+  nbr_2f:  { name: '南の家の2階の小窓から', p: [-3.76, 10.45], d: [0.56, -0.83], pitch: -12, fl: () => -slopeDH() + 2.45, out: true, see: true, eye: 1.5 },
 };
 const slopeDH = () => parseFloat($('#slope').value);
 const roadLevel = (z) => { const N = -5.445, S = 4.86, dh = slopeDH(); return z <= N ? -0.15 : z >= S ? -dh : -0.15 + (-dh + 0.15) * (z - N) / (S - N); };
