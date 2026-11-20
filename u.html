@@ -217,6 +217,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { initExtras } from './extras_u.js';
+import { addSimpleFurniture } from './furn_u.js';
 let ext = null;   // 追加機能（extras.js）
 
 // ---- モデル座標（m）。X=東、Z=南、Y=地面からの高さ。1階床は地面+0.59 ----
@@ -479,11 +480,8 @@ nbrChk.addEventListener('change', scheduleSunArea);
 $('#night').onchange = () => ext.setNight($('#night').checked);
 $('#curt').onchange = () => { ext.setCurtain($('#curt').checked); scheduleSunArea(); if (inside.on) updateSee(); };
 const FURN = [
-  ['sofa_02', 684, 515, 4.712389],
   ['modern_coffee_table_01', 795, 497.5, 4.712389],
   ['potted_plant_02', 930, 610, 0],
-  ['dining_chair_02', 447.5, 153, 0], ['dining_chair_02', 502.5, 153, 0], ['dining_chair_02', 557.5, 153, 0],
-  ['dining_chair_02', 447.5, 272, Math.PI], ['dining_chair_02', 502.5, 272, Math.PI], ['dining_chair_02', 557.5, 272, Math.PI],
 ];
 const FURN_ROT = { sofa_02: 0, modern_coffee_table_01: 0, potted_plant_02: 0, dining_chair_02: 0 };   // 素材ごとの正面の向きの補正
 let furnOK = false;
@@ -503,7 +501,8 @@ function loadFurniture() {
         furn.add(o);
       }
       // 箱で作っていた椅子とローテーブルは隠す
-      if (src.dining_chair_02 && src.modern_coffee_table_01) { furnOK = true; for (const k in models) hideBoxFurniture(models[k]); }
+      addSimpleFurniture(furn, FL1);
+      if (src.modern_coffee_table_01) { furnOK = true; for (const k in models) hideBoxFurniture(models[k]); }
     });
 }
 

@@ -43,29 +43,17 @@ const plasterTex = (col, amt = 10, seed = 1) => canvasTex('pl' + col + '_' + amt
   }
   for (let i = 0; i < 9000; i++) { g.fillStyle = rgb(col, (r() - 0.5) * amt * 1.6, 0.5); g.fillRect(r() * W, r() * H, 1.5, 1.5); }
 }, 0.5, 0.5);
-// 写真の素材（assets/tex の *_diff.jpg）を、明るさの模様は残したまま指定の色に染め直す
-function photoTex(name, col, contrast = 1, rep = 1) {
-  const key = 'ph' + name + col + '_' + contrast + '@' + rep;
-  if (cache[key]) return cache[key];
-  const c = document.createElement('canvas'); c.width = c.height = 1024;
-  const g = c.getContext('2d'); g.fillStyle = hex(col); g.fillRect(0, 0, 1024, 1024);
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace;
-  const img = new Image();
-  img.onload = () => {
-    g.drawImage(img, 0, 0, 1024, 1024);
-    const d = g.getImageData(0, 0, 1024, 1024), a = d.data;
-    let sum = 0; for (let i = 0; i < a.length; i += 4) sum += a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11;
-    const mean = sum / (a.length / 4), cr = (col >> 16) & 255, cg = (col >> 8) & 255, cb = col & 255;
-    for (let i = 0; i < a.length; i += 4) {
-      const f = Math.max(0.2, 1 + ((a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11) / mean - 1) * contrast);
-      a[i] = Math.min(255, cr * f); a[i + 1] = Math.min(255, cg * f); a[i + 2] = Math.min(255, cb * f);
-    }
-    g.putImageData(d, 0, 0); t.needsUpdate = true;
-    const dd = window._dbg; dd && dd.ext && dd.ext.invalidate && dd.ext.invalidate();
-  };
-  img.src = 'assets/tex/' + name + '_diff.jpg';
-  return (cache[key] = t);
+// 写真の素材（assets/tex の *_diff.jpg）を、そのまま読み込んで「色を掛けて」指定の色にする。
+// 写真の平均の色（リニア値。Python で計算）で割って、平均がちょうど指定の色になるようにする
+const PHOTO_MEAN = {
+  oak_wood_planks: [0.3645, 0.1811, 0.0886],
+  wood_floor: [0.2176, 0.1175, 0.0554],
+  white_plaster_02: [0.272, 0.2461, 0.1985],
+};
+function tint(m, name, col) {
+  const c = new THREE.Color(col);   // sRGB の指定 → three.js の中ではリニア値
+  const mean = PHOTO_MEAN[name];
+  m.color.setRGB(c.r / mean[0], c.g / mean[1], c.b / mean[2], THREE.LinearSRGBColorSpace);
 }
 // クロス（壁紙）：色はほぼ一様、ごく細かい粒だけ（1枚の絵＝1m 角）
 const clothTex = (col) => canvasTex('cl' + col, 512, 512, (g, W, H) => {
@@ -126,7 +114,7 @@ export const PATTERNS = {
     oriage: ['concrete', 0x6a6c6e, 1.0], tread: 0x46474a, riser: 0x36373a, kitchen: 0x26272a, counter: ['concrete', 0x4c4d50, 1.2], door: 0x2a2b2e, frame: 0x1a1b1c,
     steel: 0x141516, baseboard: 0x36373a, siding: 0x232426, roof: 0x1e1f21, soffit: 0x2e2f31 },
   p4: { name: '④ 濃い茶×黒×白', note: 'ウォールナット色の細めの板の床、ベージュのクロス、テレビの壁は濃い茶の木、キッチンと扉は黒、外壁は白',
-    floor: ['wood', 'wood_floor', 0x74503a, 1.1], wall: ['cloth', 0xc2b6a4], ceiling: ['cloth', 0xd0c6b7], accent: ['wood', 'wood_floor', 0x8a6246, 1.0], woodceil: ['wood', 'wood_floor', 0x74503a, 1.1],
+    floor: ['wood', 'wood_floor', 0x5c3c2a, 1.1], wall: ['cloth', 0xc2b6a4], ceiling: ['cloth', 0xd0c6b7], accent: ['wood', 'wood_floor', 0x8a6246, 1.0], woodceil: ['wood', 'wood_floor', 0x5c3c2a, 1.1],
     oriage: ['wood', 'wood_floor', 0x8a6246, 1.0], tread: 0x5a3b26, riser: 0x46301f, kitchen: 0x1e1f21, counter: ['concrete', 0x333437, 1.1], door: 0x1e1f21, frame: 0x1e1f21,
     steel: 0x18191a, baseboard: 0x2e2f31, siding: 0xe6e3dd, roof: 0x2b2c2e, soffit: 0x5a3b26 },
 };
@@ -149,11 +137,11 @@ function surface(m, spec, name) {
   const nrm = (tex, rep, k) => { m.normalMap = load(tex + '_nor', false, rep); m.normalScale && m.normalScale.set(k, k); };
   if (kind === 'wood') {
     const [, tex, col, ct] = spec;
-    m.map = photoTex(tex, col, ct, rp); nrm(tex, rp, 0.8);
+    m.map = load(tex + '_diff', true, rp); tint(m, tex, col); nrm(tex, rp, 0.8 * (ct || 1));
     m.roughness = name === 'floor' ? 0.7 : 0.85;   // 粗さの画像は使わない（濃くてツヤが出すぎ、空が映った）
   } else if (kind === 'concrete') {
     const [, col, ct] = spec;
-    m.map = photoTex('white_plaster_02', col, ct, rp); nrm('white_plaster_02', rp, 0.8); m.roughness = 0.85;
+    m.map = load('white_plaster_02_diff', true, rp); tint(m, 'white_plaster_02', col); nrm('white_plaster_02', rp, 0.8 * (ct || 1)); m.roughness = 0.85;
   } else if (kind === 'cloth') {
     m.map = clothTex(spec[1]); m.map.repeat.set(rp, rp); nrm('white_plaster_02', 3, 0.25); m.roughness = 0.95;
   } else if (kind === 'tile') { m.map = tileTex(spec[1]); nrm('white_plaster_02', 2, 0.15); m.roughness = 0.3; }
@@ -176,7 +164,6 @@ let current = 'orig';
 try { current = localStorage.getItem('design_u') || 'orig'; } catch (e) { /* 使えないときは、はじめの色 */ }
 if (!PATTERNS[current]) current = 'orig';
 const KEYS = ['floor', 'wall', 'ceiling', 'accent', 'woodceil', 'tread', 'oriage', 'riser', 'kitchen', 'counter', 'door', 'frame', 'steel', 'baseboard', 'siding', 'roof', 'soffit'];
-let baseExposure = null;
 function applyAll() {
   const d = window._dbg; if (!d) return false;
   const p = PATTERNS[current];
@@ -187,8 +174,10 @@ function applyAll() {
     remember(m); applyTo(m, p); m.userData.design = current;
   });
   // 白っぽく飛びにくいように、パターンを選んだときは少しだけ露出を下げる
-  if (baseExposure === null) baseExposure = d.renderer.toneMappingExposure;
-  d.renderer.toneMappingExposure = p.floor ? baseExposure * 0.85 : baseExposure;
+  // 昼・夜の基準（u.html と同じ：昼 1.1、夜 1.0）に、パターンを選んだときだけ係数を掛ける（夜は照明で白く飛びやすいので強め）
+  const night = d.ext && d.ext.isNight && d.ext.isNight();
+  const base = night ? 1.0 : 1.1;
+  d.renderer.toneMappingExposure = p.floor ? base * (night ? 0.6 : 0.85) : base;
   d.ext && d.ext.invalidate && d.ext.invalidate();
   return true;
 }
@@ -216,4 +205,5 @@ if (sel) {
 setDesign(current);
 // あとから読み込まれたモデル（窓の高さを変えたとき）にも当てる
 setInterval(applyAll, 1500);
+const nightChk = document.querySelector('#night'); if (nightChk) nightChk.addEventListener('change', () => setTimeout(applyAll, 0));   // 昼夜を切り替えたらすぐ露出を合わせる
 window._design = { setDesign, PATTERNS };
