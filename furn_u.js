@@ -12,6 +12,8 @@ const M = {
   wood: new THREE.MeshStandardMaterial({ color: 0x8a6446, roughness: 0.7 }),   // 木（オーク色）
   leg: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.3 }),
 };
+// タップで色を変えるときの名前（design_u.js の CHOICES と合わせる）
+M.sofa.name = 'sofa'; M.cushion.name = 'sofa'; M.seat.name = 'chair_seat'; M.wood.name = 'chair_wood';
 // 角を少し丸めた箱（クッションらしく見せる）
 function rbox(mat, w, h, d, r = 0.03) {
   const s = new THREE.Shape(), x = w / 2 - r, y = h / 2 - r;
@@ -126,6 +128,7 @@ export function styleRug(root) {
   if (!rug || rug.userData.styled) return !!rug;
   const t = rugTexture();
   rug.material = new THREE.MeshStandardMaterial({ map: t, bumpMap: t, bumpScale: 6, roughness: 1.0, metalness: 0 });
+  rug.material.name = 'rug';
   rug.scale.y = 2.0;   // 厚み 0.8cm → 約1.6cm（毛足）
   rug.userData.styled = true; return true;
 }

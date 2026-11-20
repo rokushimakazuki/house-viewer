@@ -949,14 +949,27 @@ $('#pose').onclick = () => {
 
 // 画面をなぞって見回す
 let drag = null;
-renderer.domElement.addEventListener('pointerdown', (e) => { if (inside.on) { drag = { x: e.clientX, y: e.clientY }; renderer.domElement.setPointerCapture(e.pointerId); } });
+const ptrs = new Map(); let pinch = null;   // 画面に触れている指と、二本指の間の距離
+const pdist = () => { const [a, b] = [...ptrs.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!inside.on) return;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); renderer.domElement.setPointerCapture(e.pointerId);
+  if (ptrs.size === 2) { pinch = pdist(); drag = null; } else if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY };
+});
 renderer.domElement.addEventListener('pointermove', (e) => {
-  if (!inside.on || !drag) return;
+  if (!inside.on) return;
+  if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size >= 2 && pinch != null) { const dd = pdist(); walk((dd - pinch) * 0.012); pinch = dd; return; }   // 100px 広げると約1.2m 進む
+  if (!drag) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag = { x: e.clientX, y: e.clientY };
   if (inside.gyro) { inside.gyroOffset += dx * 0.004; return; }
   inside.yaw += dx * 0.004; inside.pitch = THREE.MathUtils.clamp(inside.pitch + dy * 0.004, -1.4, 1.4);
 });
-const endDrag = () => { drag = null; };
+const endDrag = (e) => {
+  ptrs.delete(e.pointerId);
+  if (ptrs.size < 2) pinch = null;
+  if (ptrs.size === 1) { const [q] = ptrs.values(); drag = { x: q.x, y: q.y }; } else drag = null;   // 1本残ったら見回しに戻る
+};
 renderer.domElement.addEventListener('pointerup', endDrag);
 renderer.domElement.addEventListener('pointercancel', endDrag);
 renderer.domElement.addEventListener('wheel', (e) => { if (inside.on) { e.preventDefault(); walk(-Math.sign(e.deltaY) * 0.3); } }, { passive: false });

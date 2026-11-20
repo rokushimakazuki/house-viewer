@@ -178,11 +178,52 @@ function surface(m, spec, name) {
   m.needsUpdate = true;
 }
 const SPEC_KEYS = ['floor', 'wall', 'ceiling', 'accent', 'woodceil', 'oriage', 'kitchen', 'counter'];
+// ---- タップで選べる候補（材料の名前ごと）----
+// 書き方：['wood', 写真, 色, 木目の強さ] ／ ['cloth', 色] ／ ['concrete', 色, 強さ] ／ ['tile', 色] ／ ['stone', 色]
+//        ['marble'] ／ ['plain', 色, 粗さ] ／ ['tint', 色]（今の模様のまま色を掛ける） ／ ['siding', 色]
+const OAK = 'oak_wood_planks';
+const WOODS = [['明るい木', ['wood', OAK, 0xb3875a, 1.0]], ['中間の木', ['wood', OAK, 0x8a6246, 1.0]], ['濃い木', ['wood', OAK, 0x5c3c2a, 1.1]], ['黒', ['plain', 0x262626, 0.6]]];
+export const CHOICES = {
+  floor: { label: '床', opts: [['明るいオーク', ['wood', OAK, 0xa57a52, 1.1]], ['グレージュの木', ['wood', OAK, 0x8a7a66, 1.0]], ['ウォールナット', ['wood', OAK, 0x5c3c2a, 1.1]], ['グレーのタイル', ['tile', 0x6f6b67]]] },
+  wall: { label: '壁（クロス）', opts: [['白', ['cloth', 0xd8d6d2]], ['薄いグレー', ['cloth', 0xb6b4b0]], ['グレージュ', ['cloth', 0xc4bbad]], ['濃いグレー', ['cloth', 0x7d7b78]]] },
+  ceiling: { label: '天井', opts: [['白', ['cloth', 0xdedcd8]], ['グレー', ['cloth', 0xb4b2ae]], ['木', ['wood', OAK, 0xa87a4d, 1.0]]] },
+  accent: { label: 'テレビの壁', opts: [['石目（エコカラット調）', ['stone', 0x76787b]], ['木', ['wood', OAK, 0x8a6246, 1.0]], ['グレーの塗り壁', ['concrete', 0x76797c, 1.4]], ['黒の塗り壁', ['concrete', 0x3a3b3d, 1.2]]] },
+  woodceil: { label: '木の部分（下り天井・梁・柱）', opts: WOODS },
+  tread: { label: '格子・階段・和室の扉', opts: WOODS },
+  riser: { label: '小上がりの側面', opts: WOODS },
+  oriage: { label: '和室の天井', opts: [['明るい木', ['wood', OAK, 0xb3875a, 1.0]], ['濃い木', ['wood', OAK, 0x6a4a34, 1.0]], ['グレー', ['cloth', 0x9e9c98]]] },
+  tatami: { label: '畳', opts: [['緑', ['tint', 0xffffff]], ['グレー（和紙畳）', ['tint', 0xb4b4ae]], ['黄金色', ['tint', 0xf2dc9a]]] },
+  kitchen: { label: 'キッチンの扉', opts: [['黒', ['plain', 0x1e1f21, 0.5]], ['グレーのコンクリート調', ['concrete', 0x6c6f72, 1.3]], ['白', ['plain', 0xe8e6e1, 0.4]], ['木', ['wood', OAK, 0x8a6246, 1.0]]] },
+  counter: { label: 'キッチンの天板', opts: [['黒の大理石', ['marble']], ['白', ['plain', 0xe9e7e2, 0.3]], ['グレーのコンクリート調', ['concrete', 0x86888b, 1.1]]] },
+  door: { label: 'ドア', opts: [['白', ['plain', 0xe6e3dd, 0.5]], ['木', ['wood', OAK, 0x9a7350, 1.0]], ['黒', ['plain', 0x1e1f21, 0.5]]] },
+  table: { label: 'ダイニングテーブル', opts: [['明るい木', ['wood', OAK, 0xb08a60, 1.0]], ['ウォールナット', ['wood', OAK, 0x5c3c2a, 1.1]], ['黒', ['plain', 0x222222, 0.5]]] },
+  chair_wood: { label: '椅子の木', opts: [['明るい木', ['plain', 0xa57a52, 0.7]], ['濃い木', ['plain', 0x4e3423, 0.7]], ['黒', ['plain', 0x222222, 0.6]]] },
+  chair_seat: { label: '椅子の座面', opts: [['グレー', ['plain', 0x77736d, 1.0]], ['ベージュ', ['plain', 0xb5a88f, 1.0]], ['黒', ['plain', 0x2a2a2a, 1.0]]] },
+  sofa: { label: 'ソファ', opts: [['明るいグレー', ['plain', 0x8e8a84, 1.0]], ['ベージュ', ['plain', 0xb3a78f, 1.0]], ['濃いグレー', ['plain', 0x4d4c4a, 1.0]]] },
+  rug: { label: 'ラグ', opts: [['グレー', ['tint', 0xffffff]], ['濃いグレー', ['tint', 0x8a8a8a]], ['ベージュ', ['tint', 0xe8d6b4]]] },
+  siding: { label: '外壁', opts: [['黒', ['siding', 0x3a3d40]], ['グレー', ['siding', 0x8a8c8e]], ['白', ['siding', 0xe6e3dd]]] },
+  frame: { label: '窓の枠', opts: [['黒', ['plain', 0x262728, 0.45]], ['白', ['plain', 0xe6e3dd, 0.45]], ['ブロンズ', ['plain', 0x5a4a3c, 0.45]]] },
+};
+let OVR = {};
+try { OVR = JSON.parse(localStorage.getItem('design_u_ovr') || '{}'); } catch (e) { OVR = {}; }
+function applySpec(m, v, n) {
+  if (!Array.isArray(v)) { plain(m, v, 0.6); return; }
+  const k = v[0];
+  if (k === 'plain') plain(m, v[1], v[2] ?? 0.6);
+  else if (k === 'tint') { m.color.setHex(v[1]); m.needsUpdate = true; }
+  else if (k === 'marble') { m.map = marbleTex(); m.normalMap = null; m.roughnessMap = null; m.color.setHex(0xffffff); m.roughness = 0.22; m.metalness = 0; m.needsUpdate = true; }
+  else if (k === 'siding') { m.map = sidingTex(v[1]); m.normalMap = null; m.color.setHex(0xffffff); m.roughness = 0.8; m.needsUpdate = true; }
+  else surface(m, v, n);
+}
 function applyTo(m, p) {
   const n = m.name;
-  if (n === 'counter' && topSel === 'marble') {   // 天板を大理石にする（どのパターンでも）
-    m.map = marbleTex(); m.normalMap = null; m.roughnessMap = null; m.color.setHex(0xffffff); m.roughness = 0.22; m.metalness = 0; m.needsUpdate = true; return;
-  }
+  applyPattern(m, p);
+  if (n === 'counter' && topSel === 'marble') applySpec(m, ['marble'], n);   // 天板を大理石にする（どのパターンでも）
+  const o = OVR[n], c = CHOICES[n];
+  if (c && o != null && c.opts[o]) applySpec(m, c.opts[o][1], n);          // タップで選んだもの
+}
+function applyPattern(m, p) {
+  const n = m.name;
   if (!p.floor) { restore(m); return; }
   const v = p[n];
   if (v === undefined) return;
@@ -195,14 +236,14 @@ function applyTo(m, p) {
 let current = 'orig';
 try { current = localStorage.getItem('design_u') || 'orig'; } catch (e) { /* 使えないときは、はじめの色 */ }
 if (!PATTERNS[current]) current = 'orig';
-const KEYS = ['floor', 'wall', 'ceiling', 'accent', 'woodceil', 'tread', 'oriage', 'riser', 'kitchen', 'counter', 'door', 'frame', 'steel', 'baseboard', 'siding', 'roof', 'soffit'];
+const KEYS = [...new Set(['floor', 'wall', 'ceiling', 'accent', 'woodceil', 'tread', 'oriage', 'riser', 'kitchen', 'counter', 'door', 'frame', 'steel', 'baseboard', 'siding', 'roof', 'soffit', ...Object.keys(CHOICES)])];
 function applyAll() {
   const d = window._dbg; if (!d) return false;
   const p = PATTERNS[current];
   d.rig.traverse((o) => {
     if (!o.isMesh || !KEYS.includes(o.material.name)) return;
     const m = o.material;
-    const tag = current + '|' + topSel;
+    const tag = current + '|' + topSel + '|' + (OVR[m.name] ?? '');
     if (m.userData.design === tag) return;
     remember(m); restore(m); applyTo(m, p); m.userData.design = tag;
   });
@@ -227,7 +268,12 @@ function topSelect() {
 }
 {
   const note = document.querySelector('#designnote');
-  if (note) { const s = topSelect(); s.style.marginTop = '6px'; note.after(s); }
+  if (note) {
+    const s = topSelect(); s.style.marginTop = '6px'; note.after(s);
+    const hint = document.createElement('p'); hint.className = 'sub'; hint.style.margin = '6px 0 0';
+    hint.textContent = '「中から見る」で、変えたい所（壁・天井・床・木の部分・キッチン・テーブル・椅子・ラグ・畳など）を軽くタップすると、色や素材を選べます。二本指で広げる／縮めると前後に進みます。';
+    s.after(hint);
+  }
   const ds = document.querySelector('#designsel');
   if (ds) { const grp = document.createElement('span'); grp.className = 'grp'; grp.append(topSelect()); ds.parentElement.after(grp); }
 }
@@ -256,4 +302,59 @@ setDesign(current);
 // あとから読み込まれたモデル（窓の高さを変えたとき）にも当てる
 setInterval(applyAll, 1500);
 const nightChk = document.querySelector('#night'); if (nightChk) nightChk.addEventListener('change', () => setTimeout(applyAll, 0));   // 昼夜を切り替えたらすぐ露出を合わせる
-window._design = { setDesign, setTop, PATTERNS };
+// ---- タップで色・素材を選ぶ ----
+// 1本指で軽くタップ（ほとんど動かさず 0.4 秒以内）したときだけ反応。なぞる・二本指は今まで通り
+const pop = document.createElement('div');
+pop.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:50;background:rgba(28,30,33,.94);color:#fff;border-radius:14px;padding:12px 12px 10px;max-width:92vw;box-shadow:0 6px 20px rgba(0,0,0,.4);display:none;font-size:15px';
+document.body.append(pop);
+function closePop() { pop.style.display = 'none'; }
+function openPop(n) {
+  const c = CHOICES[n]; pop.innerHTML = '';
+  const h = document.createElement('div'); h.style.cssText = 'font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between;gap:12px;align-items:center';
+  h.textContent = c.label + ' を変える';
+  const x = document.createElement('button'); x.textContent = '×'; x.style.cssText = 'background:none;border:0;color:#fff;font-size:22px;padding:0 4px'; x.onclick = closePop; h.append(x);
+  pop.append(h);
+  const row = document.createElement('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px';
+  const btn = (label, on, f) => { const b = document.createElement('button'); b.textContent = label; b.style.cssText = `padding:8px 12px;border-radius:10px;border:1px solid ${on ? '#e8792f' : '#555'};background:${on ? '#3a2a1f' : '#2c2f33'};color:${on ? '#ffb27a' : '#fff'};font-size:15px`; b.onclick = f; row.append(b); };
+  c.opts.forEach(([label], i) => btn(label, OVR[n] === i, () => { setOverride(n, i); openPop(n); }));
+  btn('パターンどおり', OVR[n] == null, () => { setOverride(n, null); openPop(n); });
+  pop.append(row); pop.style.display = 'block';
+}
+export function setOverride(n, i) {
+  if (i == null) delete OVR[n]; else OVR[n] = i;
+  try { localStorage.setItem('design_u_ovr', JSON.stringify(OVR)); } catch (e) { /* 保存できなくても切り替えはできる */ }
+  applyAll();
+}
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function visibleChain(o) { for (; o; o = o.parent) if (!o.visible) return false; return true; }
+function pick(cx, cy) {
+  const d = window._dbg; if (!d) return null;
+  const r = d.renderer.domElement.getBoundingClientRect();
+  ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+  d.camera.updateMatrixWorld(); ray.setFromCamera(ndc, d.camera); ray.firstHitOnly = false;
+  const hits = ray.intersectObject(d.rig, true);
+  for (const h of hits) {
+    if (!h.object.isMesh || !visibleChain(h.object)) continue;
+    const n = h.object.material && h.object.material.name;
+    if (n === 'glass') continue;   // ガラスの向こうを見る
+    return CHOICES[n] ? n : null;  // 一番手前の物だけ（選べない物なら何もしない）
+  }
+  return null;
+}
+{
+  const cv = () => window._dbg && window._dbg.renderer.domElement;
+  let t0 = null, touches = 0;
+  const wait = setInterval(() => {
+    const c = cv(); if (!c) return; clearInterval(wait);
+    c.addEventListener('pointerdown', (e) => { touches++; t0 = touches === 1 ? { x: e.clientX, y: e.clientY, t: performance.now() } : null; });
+    c.addEventListener('pointermove', (e) => { if (t0 && Math.hypot(e.clientX - t0.x, e.clientY - t0.y) > 8) t0 = null; });
+    const up = (e) => {
+      touches = Math.max(0, touches - 1);
+      if (!t0 || e.type !== 'pointerup' || performance.now() - t0.t > 400) { t0 = null; return; }
+      const n = pick(e.clientX, e.clientY); t0 = null;
+      if (n) openPop(n); else closePop();
+    };
+    c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
+  }, 300);
+}
+window._design = { setDesign, setTop, setOverride, PATTERNS, CHOICES, pick };
