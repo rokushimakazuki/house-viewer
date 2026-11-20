@@ -272,7 +272,7 @@ const CLOTHS = [['白', ['cloth', 0xdedcd8]], ['オフホワイト（生成り�
   ['テラコッタ', ['cloth', 0xb06a4c]], ['白い塗り壁', ['concrete', 0xd6d3cc, 0.7]], ['コンクリート調', ['concrete', 0x9c9a96, 1.2]], ['木の羽目板', ['wood', OAK, W_NAT, 1.0]]];
 const FABRIC = (pal) => pal.map(([n, c]) => [n, ['plain', c, 1.0]]);
 export const CHOICES = {
-  floor: { label: '床', opts: [['白木のオーク', ['wood', OAK, W_LIGHT, 0.9]], ['ナチュラルオーク', ['wood', OAK, W_NAT, 1.1]], ['グレージュの木', ['wood', OAK, 0x8a7a66, 1.0]], ['アッシュグレー', ['wood', OAK, 0x8f8c86, 0.9]],
+  floor: { label: '床', opts: [['白木（明るい）＝下り天井の白木と同じ色', ['wood', OAK, W_LIGHT, 0.9]], ['白木（下り天井の見え方に近い・少し濃いめ）', ['wood', OAK, 0xb48c62, 0.95]], ['ホワイトオーク（もっと明るい）', ['wood', OAK, 0xdcc6a4, 0.8]], ['ナチュラルオーク', ['wood', OAK, W_NAT, 1.1]], ['グレージュの木', ['wood', OAK, 0x8a7a66, 1.0]], ['アッシュグレー', ['wood', OAK, 0x8f8c86, 0.9]],
     ['チーク', ['wood', OAK, W_TEAK, 1.0]], ['ウォールナット', ['wood', OAK, W_WAL, 1.1]], ['ヘリンボーン（オーク）', ['herring', W_NAT]], ['ヘリンボーン（ウォールナット）', ['herring', W_WAL]],
     ['グレーのタイル', ['tile', 0x6f6b67]], ['ベージュのタイル', ['tile', 0x9a8f80]], ['濃いグレーのタイル', ['tile', 0x4a4948]], ['モルタル調', ['concrete', 0x63625f, 1.2]]] },
   wall: { label: '壁（クロス）', opts: CLOTHS },
