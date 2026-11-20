@@ -97,10 +97,60 @@ export function addKitchenDetails(furn, FL1) {
   for (let x = 653; x < 856; x += 50.6) kbox(g, K.groove, x - 0.3, 43, x + 0.3, 43.6, 1.52, 2.18, FL1);
   furn.add(g);
 }
+// ---- ラグ（グレーの毛足のある感じ。白い線で大きな区切り模様）----
+// 毛並みは「短い線をたくさん」描いた絵で表し、同じ絵を凹凸（bumpMap）にも使う。1枚の絵＝ラグ全体（1.8m×1.4m）
+function rugTexture() {
+  const W = 1024, H = 800, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  let a = 7; const r = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
+  g.fillStyle = '#5f6164'; g.fillRect(0, 0, W, H);
+  // 大きな区切りの白い線（ゆがんだ格子）
+  const lines = [];
+  for (let i = 1; i < 6; i++) { const x = (i / 6) * W + (r() - 0.5) * 90; lines.push([[x + (r() - 0.5) * 120, 0], [x + (r() - 0.5) * 120, H]]); }
+  for (let i = 1; i < 4; i++) { const y = (i / 4) * H + (r() - 0.5) * 80; lines.push([[0, y + (r() - 0.5) * 100], [W, y + (r() - 0.5) * 100]]); }
+  g.strokeStyle = '#b9bab8'; g.lineWidth = 6; g.lineCap = 'round';
+  for (const [[x0, y0], [x1, y1]] of lines) { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }
+  // 毛並み：短い線を明暗ランダムに
+  for (let i = 0; i < 90000; i++) {
+    const x = r() * W, y = r() * H, ang = r() * Math.PI * 2, L = 2 + r() * 6, v = 60 + r() * 90 | 0;
+    g.strokeStyle = `rgba(${v},${v + 2},${v + 4},0.5)`; g.lineWidth = 1 + r();
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(ang) * L, y + Math.sin(ang) * L); g.stroke();
+  }
+  // 端のふち（少し濃く）
+  g.strokeStyle = 'rgba(60,62,64,0.5)'; g.lineWidth = 10; g.strokeRect(5, 5, W - 10, H - 10);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
+}
+export function styleRug(root) {
+  let rug = null; root.traverse((o) => { if (o.name === 'rug') rug = o; });
+  if (!rug || rug.userData.styled) return !!rug;
+  const t = rugTexture();
+  rug.material = new THREE.MeshStandardMaterial({ map: t, bumpMap: t, bumpScale: 6, roughness: 1.0, metalness: 0 });
+  rug.scale.y = 2.0;   // 厚み 0.8cm → 約1.6cm（毛足）
+  rug.userData.styled = true; return true;
+}
+
+// ---- ソファ：はじめは出さない。ボタンで出し入れ（11/20 六嶋さん）----
+let sofaObj = null;
+function sofaButton() {
+  const b = document.createElement('button'); b.className = 'sofabtn'; b.textContent = 'ソファを出す';
+  b.onclick = () => setSofa(!sofaObj.visible); return b;
+}
+function setSofa(on) {
+  if (!sofaObj) return;
+  sofaObj.visible = on;
+  document.querySelectorAll('.sofabtn').forEach((b) => { b.textContent = on ? 'ソファを消す' : 'ソファを出す'; b.classList.toggle('on', on); });
+  const d = window._dbg; d && d.ext && d.ext.invalidate && d.ext.invalidate();
+}
 export function addSimpleFurniture(furn, FL1) {
   const put = (o, x, y, a) => { o.position.set(PX(x), FL1, PZ(y)); o.rotation.y = -a; furn.add(o); };
   // ソファは東（テレビ）を向く。以前のモデルと同じ位置（中心 x=684, y=515）
-  put(sofa(), 684, 515, -Math.PI / 2);
+  sofaObj = sofa(); put(sofaObj, 684, 515, -Math.PI / 2); sofaObj.visible = false;
+  { const note = document.querySelector('#designnote'); if (note) { const b = sofaButton(); b.style.marginTop = '6px'; note.after(b); } }
+  { const ds = document.querySelector('#designsel'); if (ds) { const grp = document.createElement('span'); grp.className = 'grp'; grp.append(sofaButton()); ds.parentElement.after(grp); } }
+  // ラグ（extras 側で作られる）を見つけたら見た目を替える
+  const tryRug = () => { const d = window._dbg; if (!(d && styleRug(d.rig))) setTimeout(tryRug, 500); };
+  tryRug();
   for (const x of [447.5, 502.5, 557.5]) { put(chair(), x, 153, 0); put(chair(), x, 272, Math.PI); }
   addKitchenDetails(furn, FL1);
 }
