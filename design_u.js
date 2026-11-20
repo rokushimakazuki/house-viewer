@@ -247,6 +247,7 @@ function applyAll() {
     if (m.userData.design === tag) return;
     remember(m); restore(m); applyTo(m, p); m.userData.design = tag;
   });
+  applyParts(d);
   // 白っぽく飛びにくいように、パターンを選んだときは少しだけ露出を下げる
   // 昼・夜の基準（u.html と同じ：昼 1.1、夜 1.0）に、パターンを選んだときだけ係数を掛ける（夜は照明で白く飛びやすいので強め）
   const night = d.ext && d.ext.isNight && d.ext.isNight();
@@ -298,17 +299,102 @@ if (sel) {
   for (const k in PATTERNS) { const o = document.createElement('option'); o.value = k; o.textContent = PATTERNS[k].name; sel.append(o); }
   sel.onchange = () => setDesign(sel.value);
 }
-setDesign(current);
 // あとから読み込まれたモデル（窓の高さを変えたとき）にも当てる
 setInterval(applyAll, 1500);
 const nightChk = document.querySelector('#night'); if (nightChk) nightChk.addEventListener('change', () => setTimeout(applyAll, 0));   // 昼夜を切り替えたらすぐ露出を合わせる
+// ---- 壁を1面ずつ ----
+const PART_MATS = ['wall'];
+let PARTS = {};
+try { PARTS = JSON.parse(localStorage.getItem('design_u_parts') || '{}'); } catch (e) { PARTS = {}; }
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _n = new THREE.Vector3();
+const pkey = (v) => `${Math.round(v.x * 1000)},${Math.round(v.y * 1000)},${Math.round(v.z * 1000)}`;
+// 三角形ごとの平面（向き＋位置）と頂点の位置
+function triInfo(geo) {
+  const ver = geo.index ? geo.index.version + ':' + geo.index.count + ':' + geo.index.array[0] : 'n';   // 並べ替え（BVH）や切り出しで作り直す
+  if (geo.userData.tri && geo.userData.tri.ver === ver) return geo.userData.tri;
+  const pos = geo.attributes.position, idx = geo.index, n = (idx ? idx.count : pos.count) / 3;
+  const plane = new Array(n), verts = new Array(n);
+  for (let t = 0; t < n; t++) {
+    const i0 = idx ? idx.getX(3 * t) : 3 * t, i1 = idx ? idx.getX(3 * t + 1) : 3 * t + 1, i2 = idx ? idx.getX(3 * t + 2) : 3 * t + 2;
+    _a.fromBufferAttribute(pos, i0); _b.fromBufferAttribute(pos, i1); _c.fromBufferAttribute(pos, i2);
+    _n.subVectors(_c, _b).cross(_b.clone().sub(_a)); const L = _n.length(); if (L < 1e-9) { plane[t] = null; continue; } _n.divideScalar(L);
+    if (_n.x < -1e-6 || (Math.abs(_n.x) < 1e-6 && (_n.y < -1e-6 || (Math.abs(_n.y) < 1e-6 && _n.z < 0)))) _n.negate();   // 表裏は区別しない
+    const dd = _n.dot(_a);
+    plane[t] = `${_n.x.toFixed(2)},${_n.y.toFixed(2)},${_n.z.toFixed(2)}|${dd.toFixed(2)}`;
+    verts[t] = [pkey(_a), pkey(_b), pkey(_c), [i0, i1, i2]];
+  }
+  return (geo.userData.tri = { plane, verts, ver });
+}
+// 種の点を含む三角形から、同じ平面でつながっている三角形を集める
+function region(geo, planeKey, seed) {
+  const { plane, verts } = triInfo(geo), pos = geo.attributes.position;
+  const cand = []; for (let t = 0; t < plane.length; t++) if (plane[t] === planeKey) cand.push(t);
+  if (!cand.length) return null;
+  let start = cand[0], best = Infinity;
+  for (const t of cand) {   // 種に一番近い三角形（重心の距離）
+    const [, , , [i0, i1, i2]] = verts[t];
+    _a.fromBufferAttribute(pos, i0).add(_b.fromBufferAttribute(pos, i1)).add(_c.fromBufferAttribute(pos, i2)).divideScalar(3);
+    const dd = _a.distanceToSquared(seed); if (dd < best) { best = dd; start = t; }
+  }
+  const byV = new Map(); for (const t of cand) for (const k of verts[t].slice(0, 3)) { if (!byV.has(k)) byV.set(k, []); byV.get(k).push(t); }
+  const seen = new Set([start]), q = [start];
+  while (q.length) { const t = q.pop(); for (const k of verts[t].slice(0, 3)) for (const u of byV.get(k)) if (!seen.has(u)) { seen.add(u); q.push(u); } }
+  return seen;
+}
+// 面を切り出して、元の部品の子にする
+function splitPart(mesh, key) {
+  const [, pn, pd, sx, sy, sz] = key.split('|'), planeKey = pn + '|' + pd;   // 平面のキー自体に | が入っている
+  const seed = new THREE.Vector3(+sx / 100, +sy / 100, +sz / 100);
+  const geo = mesh.geometry, set = region(geo, planeKey, seed); if (!set) return null;
+  const { verts } = triInfo(geo), keep = [], take = [];
+  for (let t = 0; t < verts.length; t++) { if (!verts[t]) continue; (set.has(t) ? take : keep).push(...verts[t][3]); }
+  geo.setIndex(keep); geo.userData.tri = null;
+  if (geo.boundsTree && geo.computeBoundsTree) { geo.disposeBoundsTree && geo.disposeBoundsTree(); geo.computeBoundsTree(); }
+  const g2 = new THREE.BufferGeometry();
+  for (const k in geo.attributes) g2.setAttribute(k, geo.attributes[k]);
+  g2.setIndex(take); g2.computeBoundingSphere(); g2.computeBoundingBox();
+  const part = new THREE.Mesh(g2, mesh.material); part.castShadow = mesh.castShadow; part.receiveShadow = mesh.receiveShadow;
+  part.userData.partKey = key; part.userData.base = mesh;
+  mesh.add(part); (mesh.userData.parts ||= {})[key] = part;
+  return part;
+}
+function applyParts(d) {
+  const bases = [];
+  d.rig.traverse((o) => { if (o.isMesh && !o.userData.partKey && PART_MATS.includes(o.material.name)) bases.push(o); });
+  for (const mesh of bases) {
+    for (const key in PARTS) {
+      if (!key.startsWith(mesh.material.name + '|')) continue;
+      const part = (mesh.userData.parts && mesh.userData.parts[key]) || splitPart(mesh, key); if (!part) continue;
+      const i = PARTS[key], c = CHOICES[mesh.material.name];
+      if (i == null || !c.opts[i]) { part.material = mesh.material; continue; }
+      if (part.userData.opt !== i || part.material === mesh.material) {
+        const m = mesh.material.clone(); m.name = 'wallpart'; m.userData = {}; applySpec(m, c.opts[i][1], mesh.material.name);
+        part.material = m; part.userData.opt = i;
+      }
+    }
+    for (const key in (mesh.userData.parts || {})) if (!(key in PARTS)) mesh.userData.parts[key].material = mesh.material;   // 元に戻した面
+  }
+}
+export function setPart(key, i) {
+  if (i == null) delete PARTS[key]; else PARTS[key] = i;
+  try { localStorage.setItem('design_u_parts', JSON.stringify(PARTS)); } catch (e) { /* 保存できなくても切り替えはできる */ }
+  applyAll();
+}
+function partKeyOf(hit) {
+  const o = hit.object; if (o.userData.partKey) return o.userData.partKey;
+  if (!PART_MATS.includes(o.material.name) || hit.faceIndex == null) return null;
+  const { plane } = triInfo(o.geometry), pk = plane[hit.faceIndex]; if (!pk) return null;
+  const L = o.worldToLocal(hit.point.clone());
+  return `${o.material.name}|${pk}|${Math.round(L.x * 100)}|${Math.round(L.y * 100)}|${Math.round(L.z * 100)}`;
+}
+
 // ---- タップで色・素材を選ぶ ----
 // 1本指で軽くタップ（ほとんど動かさず 0.4 秒以内）したときだけ反応。なぞる・二本指は今まで通り
 const pop = document.createElement('div');
 pop.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:50;background:rgba(28,30,33,.94);color:#fff;border-radius:14px;padding:12px 12px 10px;max-width:92vw;box-shadow:0 6px 20px rgba(0,0,0,.4);display:none;font-size:15px';
 document.body.append(pop);
 function closePop() { pop.style.display = 'none'; }
-function openPop(n) {
+function openPop(n, pkeyHit) {
   const c = CHOICES[n]; pop.innerHTML = '';
   const h = document.createElement('div'); h.style.cssText = 'font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between;gap:12px;align-items:center';
   h.textContent = c.label + ' を変える';
@@ -316,6 +402,18 @@ function openPop(n) {
   pop.append(h);
   const row = document.createElement('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px';
   const btn = (label, on, f) => { const b = document.createElement('button'); b.textContent = label; b.style.cssText = `padding:8px 12px;border-radius:10px;border:1px solid ${on ? '#e8792f' : '#555'};background:${on ? '#3a2a1f' : '#2c2f33'};color:${on ? '#ffb27a' : '#fff'};font-size:15px`; b.onclick = f; row.append(b); };
+  if (pkeyHit) {   // 壁：この面だけ
+    const cap = document.createElement('div'); cap.textContent = 'この面だけ'; cap.style.cssText = 'font-size:13px;color:#bbb;margin:2px 0 4px'; pop.append(cap);
+    pop.append(row);
+    c.opts.forEach(([label], i) => btn(label, PARTS[pkeyHit] === i, () => { setPart(pkeyHit, i); openPop(n, pkeyHit); }));
+    btn('元に戻す', PARTS[pkeyHit] == null, () => { setPart(pkeyHit, null); openPop(n, pkeyHit); });
+    const cap2 = document.createElement('div'); cap2.textContent = '壁ぜんぶ'; cap2.style.cssText = 'font-size:13px;color:#bbb;margin:10px 0 4px'; pop.append(cap2);
+    const row2 = document.createElement('div'); row2.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px'; pop.append(row2);
+    const btn2 = (label, on, f) => { const b = document.createElement('button'); b.textContent = label; b.style.cssText = `padding:8px 12px;border-radius:10px;border:1px solid ${on ? '#e8792f' : '#555'};background:${on ? '#3a2a1f' : '#2c2f33'};color:${on ? '#ffb27a' : '#fff'};font-size:15px`; b.onclick = f; row2.append(b); };
+    c.opts.forEach(([label], i) => btn2(label, OVR[n] === i, () => { setOverride(n, i); openPop(n, pkeyHit); }));
+    btn2('パターンどおり', OVR[n] == null, () => { setOverride(n, null); openPop(n, pkeyHit); });
+    pop.style.display = 'block'; return;
+  }
   c.opts.forEach(([label], i) => btn(label, OVR[n] === i, () => { setOverride(n, i); openPop(n); }));
   btn('パターンどおり', OVR[n] == null, () => { setOverride(n, null); openPop(n); });
   pop.append(row); pop.style.display = 'block';
@@ -335,9 +433,11 @@ function pick(cx, cy) {
   const hits = ray.intersectObject(d.rig, true);
   for (const h of hits) {
     if (!h.object.isMesh || !visibleChain(h.object)) continue;
-    const n = h.object.material && h.object.material.name;
+    let n = h.object.material && h.object.material.name;
     if (n === 'glass') continue;   // ガラスの向こうを見る
-    return CHOICES[n] ? n : null;  // 一番手前の物だけ（選べない物なら何もしない）
+    if (h.object.userData.partKey) n = h.object.userData.base.material.name;   // 切り出した壁の面
+    if (!CHOICES[n]) return null;  // 一番手前の物だけ（選べない物なら何もしない）
+    return { n, pk: partKeyOf(h) };
   }
   return null;
 }
@@ -351,10 +451,11 @@ function pick(cx, cy) {
     const up = (e) => {
       touches = Math.max(0, touches - 1);
       if (!t0 || e.type !== 'pointerup' || performance.now() - t0.t > 400) { t0 = null; return; }
-      const n = pick(e.clientX, e.clientY); t0 = null;
-      if (n) openPop(n); else closePop();
+      const hit = pick(e.clientX, e.clientY); t0 = null;
+      if (hit) openPop(hit.n, hit.pk); else closePop();
     };
     c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
   }, 300);
 }
-window._design = { setDesign, setTop, setOverride, PATTERNS, CHOICES, pick };
+setDesign(current);   // 最初の適用（壁の面の一覧なども宣言し終えてから）
+window._design = { setDesign, setTop, setOverride, setPart, PATTERNS, CHOICES, pick, PARTS: () => PARTS };
