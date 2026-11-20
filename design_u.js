@@ -43,34 +43,36 @@ const plasterTex = (col, amt = 10, seed = 1) => canvasTex('pl' + col + '_' + amt
   }
   for (let i = 0; i < 9000; i++) { g.fillStyle = rgb(col, (r() - 0.5) * amt * 1.6, 0.5); g.fillRect(r() * W, r() * H, 1.5, 1.5); }
 }, 0.5, 0.5);
-// 木の床（1枚の絵＝1.2m 角、幅15cm の板 8列。板ごとに色を変え、木目を描く）
-const plankTex = (tones, seed = 3, rep = 1) => canvasTex('pk' + tones.join('_') + seed + '@' + rep, 1024, 1024, (g, W, H) => {
-  const r = rnd(seed), ROW = H / 8;
-  for (let row = 0; row < 8; row++) {
-    let x = -r() * 600;
-    while (x < W) {
-      const L = 300 + r() * 600, base = tones[Math.floor(r() * tones.length)], j = (r() - 0.5) * 10, y0 = row * ROW;
-      const draw = (ox) => {
-        g.fillStyle = rgb(base, j); g.fillRect(ox, y0, L, ROW);
-        // 板の中の明暗（ゆるいグラデーション）
-        const gr = g.createLinearGradient(ox, 0, ox + L, 0); gr.addColorStop(0, rgb(base, j - 8, 0.35)); gr.addColorStop(0.5, rgb(base, j + 6, 0.15)); gr.addColorStop(1, rgb(base, j - 6, 0.35));
-        g.fillStyle = gr; g.fillRect(ox, y0, L, ROW);
-        // 木目（ゆらぐ細い線）
-        for (let k = 0; k < 26; k++) {
-          const yy = y0 + 4 + r() * (ROW - 8), amp = 1 + r() * 3, ph = r() * 6.28, fr = 0.004 + r() * 0.01;
-          g.strokeStyle = rgb(base, (r() - 0.6) * 34, 0.35 + r() * 0.3); g.lineWidth = 0.6 + r() * 1.4; g.beginPath();
-          for (let t = 0; t <= L; t += 12) { const py = yy + Math.sin(ph + t * fr) * amp; t ? g.lineTo(ox + t, py) : g.moveTo(ox, py); }
-          g.stroke();
-        }
-        if (r() < 0.18) { const kx = ox + 40 + r() * (L - 80), ky = y0 + ROW * (0.3 + r() * 0.4); g.fillStyle = rgb(base, -45, 0.6); g.beginPath(); g.ellipse(kx, ky, 6 + r() * 6, 3 + r() * 3, 0, 0, 6.28); g.fill(); }
-        g.fillStyle = 'rgba(25,18,12,0.55)'; g.fillRect(ox, y0, 2, ROW);   // 板の継ぎ目
-      };
-      draw(x); if (x + L > W) draw(x - W);
-      x += L;
+// 写真の素材（assets/tex の *_diff.jpg）を、明るさの模様は残したまま指定の色に染め直す
+function photoTex(name, col, contrast = 1, rep = 1) {
+  const key = 'ph' + name + col + '_' + contrast + '@' + rep;
+  if (cache[key]) return cache[key];
+  const c = document.createElement('canvas'); c.width = c.height = 1024;
+  const g = c.getContext('2d'); g.fillStyle = hex(col); g.fillRect(0, 0, 1024, 1024);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace;
+  const img = new Image();
+  img.onload = () => {
+    g.drawImage(img, 0, 0, 1024, 1024);
+    const d = g.getImageData(0, 0, 1024, 1024), a = d.data;
+    let sum = 0; for (let i = 0; i < a.length; i += 4) sum += a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11;
+    const mean = sum / (a.length / 4), cr = (col >> 16) & 255, cg = (col >> 8) & 255, cb = col & 255;
+    for (let i = 0; i < a.length; i += 4) {
+      const f = Math.max(0.2, 1 + ((a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11) / mean - 1) * contrast);
+      a[i] = Math.min(255, cr * f); a[i + 1] = Math.min(255, cg * f); a[i + 2] = Math.min(255, cb * f);
     }
-    g.fillStyle = 'rgba(25,18,12,0.5)'; g.fillRect(0, row * ROW, W, 2);
-  }
-}, rep, rep);
+    g.putImageData(d, 0, 0); t.needsUpdate = true;
+    const dd = window._dbg; dd && dd.ext && dd.ext.invalidate && dd.ext.invalidate();
+  };
+  img.src = 'assets/tex/' + name + '_diff.jpg';
+  return (cache[key] = t);
+}
+// クロス（壁紙）：色はほぼ一様、ごく細かい粒だけ（1枚の絵＝1m 角）
+const clothTex = (col) => canvasTex('cl' + col, 512, 512, (g, W, H) => {
+  const r = rnd(9);
+  g.fillStyle = hex(col); g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 26000; i++) { g.fillStyle = rgb(col, (r() - 0.5) * 7, 0.6); g.fillRect(r() * W, r() * H, 1, 1); }
+});
 // 600mm 角のタイル（1枚の絵＝1.2m）
 const tileTex = (col) => canvasTex('tile' + col, 1024, 1024, (g, W) => {
   const r = rnd(11), T = W / 2;
@@ -105,33 +107,32 @@ const sidingTex = (col) => canvasTex('siding' + col, 1024, 512, (g, W, H) => {
 });
 
 // ---- パターン ----
-// 面の指定： [模様, 色や色の組]。模様は planks（木の板）／tile（タイル）／stone（石目）／plaster（塗り壁・コンクリート調）
-const ACACIA = [0xa8784c, 0x956541, 0xb38457, 0x8a5b3a, 0x9f7049];
-const ASHGREY = [0x8f8370, 0x857966, 0x988c79, 0x7e725f, 0x8b7f6c];
-const NATURAL = [0xb98a5c, 0xa87a4d, 0xc89a6a, 0x9c6e44];
-const DARKOAK = [0x6a4a34, 0x5a3d2a, 0x7a563c, 0x4f3423];
-const WALNUT = [0x6b4630, 0x5a3a26, 0x7a5238, 0x4e3220, 0x83593c];
+// 面の指定： [種類, …]
+//   wood（写真の木を染め直す：素材名・色・木目の強さ）／concrete（写真のコンクリートを染め直す：色・強さ）
+//   cloth（クロス）／tile（600角タイル）／stone（石目・エコカラット調）
+// 木の床は「オークの挽き板」（oak_wood_planks・幅広）と「細めの板」（wood_floor）の2種類
 export const PATTERNS = {
   orig: { name: 'はじめの色' },
-  p1: { name: '① グレー×木の床', note: '薄いグレーの壁＋グレーの塗り壁、色むらのある木の床、グレーのキッチン、濃いグレーの扉（写真1の雰囲気）',
-    floor: ['planks', ACACIA], wall: ['plaster', 0xb3b1ad, 6], ceiling: ['plaster', 0xc6c4c0, 4], accent: ['plaster', 0x77797c, 16], woodceil: ['planks', DARKOAK],
-    tread: 0x5e4029, oriage: 0x46484a, riser: 0x4e3626, kitchen: ['plaster', 0x6d6f72, 14], counter: ['plaster', 0x7a7c7f, 12], door: 0x393b3e, frame: 0x262728,
+  p1: { name: '① グレー×木の床', note: '薄いグレーのクロス、オークの挽き板の床、テレビの壁はグレーの石目タイル（エコカラット調）、キッチンはコンクリート調、扉は濃いグレー（写真1の雰囲気）',
+    floor: ['wood', 'oak_wood_planks', 0xa57a52, 1.1], wall: ['cloth', 0xb6b4b0], ceiling: ['cloth', 0xc8c6c2], accent: ['stone', 0x76787b], woodceil: ['wood', 'wood_floor', 0x5e4330, 1.2],
+    oriage: ['wood', 'wood_floor', 0x7a5a40, 1.1], tread: 0x5e4029, riser: 0x4e3626, kitchen: ['concrete', 0x75777a, 1.3], counter: ['concrete', 0x86888b, 1.1], door: 0x393b3e, frame: 0x262728,
     steel: 0x1c1d1e, baseboard: 0x393b3e, siding: 0x3a3d40, roof: 0x2b2c2e, soffit: 0x3a3b3c },
-  p2: { name: '② 白×グレー×木の天井', note: 'あたたかいグレージュの壁、グレーの塗り壁、明るい木の床、和室の天井と階段は木（写真2の雰囲気）',
-    floor: ['planks', ASHGREY], wall: ['plaster', 0xc2b9ab, 6], ceiling: ['plaster', 0xd0c9be, 4], accent: ['plaster', 0x6f7275, 16], woodceil: ['planks', NATURAL],
-    tread: 0xa87a4d, oriage: 0xb3875a, riser: 0x8a6440, kitchen: ['plaster', 0x686b6e, 14], counter: 0xe9e7e2, door: 0xdcd6cc, frame: 0x3a3b3c,
+  p2: { name: '② グレージュ×明るい木', note: 'グレージュのクロス、明るい色のオークの挽き板、テレビの壁はグレーの塗り壁、和室の天井と階段は木（写真2の雰囲気）',
+    floor: ['wood', 'oak_wood_planks', 0xb09a7e, 1.0], wall: ['cloth', 0xc4bbad], ceiling: ['cloth', 0xd2cbc0], accent: ['concrete', 0x76797c, 1.4], woodceil: ['wood', 'wood_floor', 0xa87a4d, 1.1],
+    oriage: ['wood', 'wood_floor', 0xb3875a, 1.0], tread: 0xa87a4d, riser: 0x8a6440, kitchen: ['concrete', 0x6c6f72, 1.3], counter: 0xe9e7e2, door: 0xdcd6cc, frame: 0x3a3b3c,
     steel: 0x2a2b2c, baseboard: 0xcfc8bc, siding: 0x8a8c8e, roof: 0x2f3033, soffit: 0xb3875a },
-  p3: { name: '③ ダーク×石目タイル', note: 'グレーのタイルの床、グレーの壁と天井、テレビの壁は濃い石目、キッチンと扉は黒（写真3の雰囲気）',
-    floor: ['tile', 0x6f6b67], wall: ['plaster', 0x9c9a96, 8], ceiling: ['plaster', 0xb2b0ac, 5], accent: ['stone', 0x515356], woodceil: ['plaster', 0x5f6163, 12],
-    tread: 0x46474a, oriage: 0x36373a, riser: 0x36373a, kitchen: 0x26272a, counter: ['plaster', 0x48494c, 14], door: 0x2a2b2e, frame: 0x1a1b1c,
+  p3: { name: '③ ダーク×石目タイル', note: 'グレーのタイルの床、グレーのクロス、テレビの壁は濃い石目、キッチンと扉は黒（写真3の雰囲気）',
+    floor: ['tile', 0x6f6b67], wall: ['cloth', 0x9e9c98], ceiling: ['cloth', 0xb4b2ae], accent: ['stone', 0x56585b], woodceil: ['concrete', 0x5f6163, 1.2],
+    oriage: ['concrete', 0x6a6c6e, 1.0], tread: 0x46474a, riser: 0x36373a, kitchen: 0x26272a, counter: ['concrete', 0x4c4d50, 1.2], door: 0x2a2b2e, frame: 0x1a1b1c,
     steel: 0x141516, baseboard: 0x36373a, siding: 0x232426, roof: 0x1e1f21, soffit: 0x2e2f31 },
-  p4: { name: '④ 濃い茶×黒×白', note: 'ウォールナットのような濃い床、ベージュの壁、テレビの壁と階段は濃い茶、キッチンと扉は黒、外壁は白',
-    floor: ['planks', WALNUT], wall: ['plaster', 0xbfb3a1, 6], ceiling: ['plaster', 0xcdc3b4, 4], accent: ['planks', WALNUT], woodceil: ['planks', WALNUT],
-    tread: 0x5a3b26, oriage: 0x46301f, riser: 0x46301f, kitchen: 0x1e1f21, counter: ['plaster', 0x2e2f31, 10], door: 0x1e1f21, frame: 0x1e1f21,
+  p4: { name: '④ 濃い茶×黒×白', note: 'ウォールナット色の細めの板の床、ベージュのクロス、テレビの壁は濃い茶の木、キッチンと扉は黒、外壁は白',
+    floor: ['wood', 'wood_floor', 0x74503a, 1.1], wall: ['cloth', 0xc2b6a4], ceiling: ['cloth', 0xd0c6b7], accent: ['wood', 'wood_floor', 0x8a6246, 1.0], woodceil: ['wood', 'wood_floor', 0x74503a, 1.1],
+    oriage: ['wood', 'wood_floor', 0x8a6246, 1.0], tread: 0x5a3b26, riser: 0x46301f, kitchen: 0x1e1f21, counter: ['concrete', 0x333437, 1.1], door: 0x1e1f21, frame: 0x1e1f21,
     steel: 0x18191a, baseboard: 0x2e2f31, siding: 0xe6e3dd, roof: 0x2b2c2e, soffit: 0x5a3b26 },
 };
-// 材料ごとの、模様1枚の大きさ（GLB の UV は floor＝1.2m、wall・ceiling＝1m、accent・woodceil＝0.6m、kitchen 等＝1m 単位）
-const REP = { floor: 1, accent: 0.5, woodceil: 0.5, wall: 1, ceiling: 1, kitchen: 1, counter: 1 };
+// 材料ごとの、絵1枚の大きさの調整（GLB の UV は floor＝1.2m、wall・ceiling＝1m、accent・woodceil＝0.6m 単位）
+// 写真の木は1枚＝約2m（オーク）にしたいので floor は 0.6
+const REP = { floor: 0.6, accent: 0.3, woodceil: 0.3, oriage: 0.5, wall: 1, ceiling: 1, kitchen: 0.5, counter: 0.5 };
 
 function remember(m) {
   if (m.userData.orig) return;
@@ -141,29 +142,32 @@ function restore(m) {
   const o = m.userData.orig; if (!o) return;
   m.map = o.map; m.normalMap = o.normalMap; m.roughnessMap = o.roughnessMap; m.color.setHex(o.color); m.roughness = o.roughness; m.metalness = o.metalness; m.needsUpdate = true;
 }
-function plain(m, col, rough = 0.6, metal = 0) { m.map = null; m.roughnessMap = null; m.color.setHex(col); m.roughness = rough; m.metalness = metal; m.needsUpdate = true; }
+function plain(m, col, rough = 0.6, metal = 0) { m.map = null; m.normalMap = null; m.roughnessMap = null; m.color.setHex(col); m.roughness = rough; m.metalness = metal; m.needsUpdate = true; }
 function surface(m, spec, name) {
-  const [kind, val, amt] = spec, rp = REP[name] ?? 1;
+  const kind = spec[0], rp = REP[name] ?? 1;
   m.roughnessMap = null; m.metalness = 0; m.color.setHex(0xffffff);
-  if (kind === 'planks') {
-    const t = plankTex(val, name === 'floor' ? 3 : 7, rp); m.map = t;
-    m.normalMap = load('oak_wood_planks_nor', false, rp); m.normalScale && m.normalScale.set(0.6, 0.6); m.roughness = name === 'floor' ? 0.55 : 0.7;
-  } else if (kind === 'tile') { m.map = tileTex(val); m.normalMap = null; m.roughness = 0.32; }
-  else if (kind === 'stone') { m.map = stoneTex(val); m.normalMap = load('white_plaster_02_nor', false, 1); m.normalScale && m.normalScale.set(1, 1); m.roughness = 0.75; }
-  else {
-    const t = plasterTex(val, amt ?? 10, name.length); t.repeat.set(rp * 0.5, rp * 0.5); m.map = t;
-    m.normalMap = load('white_plaster_02_nor', false, 1); m.normalScale && m.normalScale.set(0.5, 0.5); m.roughness = 0.9;
-  }
+  const nrm = (tex, rep, k) => { m.normalMap = load(tex + '_nor', false, rep); m.normalScale && m.normalScale.set(k, k); };
+  if (kind === 'wood') {
+    const [, tex, col, ct] = spec;
+    m.map = photoTex(tex, col, ct, rp); nrm(tex, rp, 0.8);
+    m.roughnessMap = load(tex + '_rough', false, rp); m.roughness = name === 'floor' ? 0.85 : 1.0;
+  } else if (kind === 'concrete') {
+    const [, col, ct] = spec;
+    m.map = photoTex('white_plaster_02', col, ct, rp); nrm('white_plaster_02', rp, 0.8); m.roughness = 0.85;
+  } else if (kind === 'cloth') {
+    m.map = clothTex(spec[1]); m.map.repeat.set(rp, rp); nrm('white_plaster_02', 3, 0.25); m.roughness = 0.95;
+  } else if (kind === 'tile') { m.map = tileTex(spec[1]); nrm('white_plaster_02', 2, 0.15); m.roughness = 0.3; }
+  else if (kind === 'stone') { m.map = stoneTex(spec[1]); m.map.repeat.set(0.5, 0.5); nrm('white_plaster_02', 1, 1.6); m.roughness = 0.8; }
   m.needsUpdate = true;
 }
-const SPEC_KEYS = ['floor', 'wall', 'ceiling', 'accent', 'woodceil', 'kitchen', 'counter'];
+const SPEC_KEYS = ['floor', 'wall', 'ceiling', 'accent', 'woodceil', 'oriage', 'kitchen', 'counter'];
 function applyTo(m, p) {
   const n = m.name;
   if (!p.floor) { restore(m); return; }
   const v = p[n];
   if (v === undefined) return;
   if (SPEC_KEYS.includes(n) && Array.isArray(v)) surface(m, v, n);
-  else if (n === 'siding') { m.map = sidingTex(v); m.color.setHex(0xffffff); m.roughness = 0.8; m.needsUpdate = true; }
+  else if (n === 'siding') { m.map = sidingTex(v); m.normalMap = null; m.color.setHex(0xffffff); m.roughness = 0.8; m.needsUpdate = true; }
   else if (n === 'frame' || n === 'steel') plain(m, v, 0.45, 0.3);
   else plain(m, v, n === 'counter' ? 0.35 : 0.6);
 }
