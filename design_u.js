@@ -150,7 +150,7 @@ function surface(m, spec, name) {
   if (kind === 'wood') {
     const [, tex, col, ct] = spec;
     m.map = photoTex(tex, col, ct, rp); nrm(tex, rp, 0.8);
-    m.roughnessMap = load(tex + '_rough', false, rp); m.roughness = name === 'floor' ? 0.85 : 1.0;
+    m.roughness = name === 'floor' ? 0.7 : 0.85;   // 粗さの画像は使わない（濃くてツヤが出すぎ、空が映った）
   } else if (kind === 'concrete') {
     const [, col, ct] = spec;
     m.map = photoTex('white_plaster_02', col, ct, rp); nrm('white_plaster_02', rp, 0.8); m.roughness = 0.85;
