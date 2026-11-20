@@ -485,7 +485,7 @@ const FURN = [
 ];
 const FURN_ROT = { sofa_02: 0, modern_coffee_table_01: 0, potted_plant_02: 0, dining_chair_02: 0 };   // 素材ごとの正面の向きの補正
 let furnOK = false;
-function hideBoxFurniture(root) { root.traverse((m) => { if (m.isMesh && ['chair', 'lowtable'].includes(m.material.name)) m.visible = false; }); }
+function hideBoxFurniture(root) { root.traverse((m) => { if (m.isMesh && ['chair', 'lowtable', 'table'].includes(m.material.name)) m.visible = false; }); }
 function loadFurniture() {
   const ids = [...new Set(FURN.map((f) => f[0]))];
   const gl = new GLTFLoader();

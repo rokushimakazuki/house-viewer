@@ -8,8 +8,8 @@ const fabric = (col) => new THREE.MeshStandardMaterial({ color: col, roughness: 
 const M = {
   sofa: fabric(0x8e8a84),        // 明るいグレーの布
   cushion: fabric(0x96928c),
-  seat: fabric(0x77736d),        // 椅子の座面（グレーの布）
-  wood: new THREE.MeshStandardMaterial({ color: 0x8a6446, roughness: 0.7 }),   // 木（オーク色）
+  seat: new THREE.MeshStandardMaterial({ color: 0x7f888c, roughness: 0.62, metalness: 0 }),   // 椅子（グレーの革風）
+  wood: new THREE.MeshStandardMaterial({ color: 0x1f1f20, roughness: 0.45, metalness: 0.4 }),   // 椅子の脚（黒い金属）。名前は chair_wood のまま（タップで色を変えられる）
   leg: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.3 }),
 };
 // タップで色を変えるときの名前（design_u.js の CHOICES と合わせる）
@@ -38,17 +38,50 @@ function sofa() {
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(at(box(M.leg, 0.03, 0.12, 0.03), sx * (W / 2 - 0.06), 0.06, sz * (D / 2 - 0.06)));
   return g;
 }
-// ダイニングの椅子（木のフレーム＋布の座面。座面 0.44m・背 0.80m）。前＝+z
+// ダイニングの椅子：丸い座面と、すき間をあけた丸い背もたれ（包み込む形）。グレーの革風・黒い細い脚。前＝+z
+// 座面の高さ 0.45m・背もたれの上 0.78m・幅 約0.54m
+function ringBand(mat, rOut, rIn, a0, a1, h, bev) {   // 上から見て扇形の帯（背もたれ）を、縦に厚みを付けて作る
+  const sh = new THREE.Shape();
+  sh.absarc(0, 0, rOut, a0, a1, false); sh.absarc(0, 0, rIn, a1, a0, true);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: h - 2 * bev, bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 4, curveSegments: 32 });
+  g.rotateX(-Math.PI / 2);   // 押し出しを縦（上向き）に
+  const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; return m;
+}
 function chair() {
-  const g = new THREE.Group(), W = 0.44, D = 0.46, SH = 0.44, T = 0.03;
-  for (const sx of [-1, 1]) {
-    g.add(at(box(M.wood, T, SH - 0.04, T), sx * (W / 2 - T / 2), (SH - 0.04) / 2, D / 2 - T / 2));     // 前の脚
-    g.add(at(box(M.wood, T, 0.8, T), sx * (W / 2 - T / 2), 0.4, -D / 2 + T / 2));                      // 後ろの脚（背まで）
+  const g = new THREE.Group(), SH = 0.45;
+  // 座面：丸みのある円盤（少し前後に長い）
+  const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.255, 0.24, 0.075, 40), M.seat);
+  seat.scale.z = 0.92; seat.position.y = SH - 0.035; seat.castShadow = seat.receiveShadow = true; g.add(seat);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.245, 0.025, 10, 40), M.seat);
+  rim.rotation.x = Math.PI / 2; rim.scale.y = 0.92; rim.position.y = SH - 0.01; g.add(rim);
+  // 背もたれ：後ろ側を約 190° 囲む帯（座面とすき間をあける）
+  const back = ringBand(M.seat, 0.27, 0.215, -Math.PI * 0.03, Math.PI * 1.03, 0.16, 0.025);   // 形の角度 90° が後ろ（-z）
+  back.position.y = SH + 0.14; g.add(back);   // 0.59〜0.76m
+  // 脚：4本、少し外へ開く
+  for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.007, SH - 0.06, 10), M.wood);
+    leg.position.set(sx * 0.17, (SH - 0.06) / 2, sz * 0.15); leg.rotation.z = -sx * 0.10; leg.rotation.x = sz * 0.10; leg.castShadow = true; g.add(leg);
   }
-  g.add(at(box(M.wood, W, 0.03, D), 0, SH - 0.055, 0));                     // 座枠
-  g.add(at(rbox(M.seat, W - 0.02, 0.05, D - 0.02, 0.02), 0, SH - 0.015, 0.0));   // 座面（布）
-  g.add(at(box(M.wood, W - 2 * T, 0.09, 0.02), 0, 0.72, -D / 2 + T / 2));   // 背の上の板
-  g.add(at(box(M.wood, W - 2 * T, 0.04, 0.02), 0, 0.56, -D / 2 + T / 2));   // 背の下の横木
+  return g;
+}
+// ダイニングテーブル：グレーのセラミック天板（厚み 1.2cm）＋黒の幕板と四角い脚。180×90cm・高さ 0.72m
+const T = {
+  top: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0 }),
+  frame: new THREE.MeshStandardMaterial({ color: 0x1c1c1d, roughness: 0.45, metalness: 0.35 }),
+};
+T.top.name = 'table';   // タップで天板の色・素材を変えられる
+{
+  const tl = new THREE.TextureLoader();
+  const t = tl.load('assets/tex/white_plaster_02_diff.jpg'); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1.2, 0.6);
+  T.top.map = t;
+  T.top.color.setRGB(0.085 / 0.272, 0.089 / 0.2461, 0.093 / 0.1985, THREE.LinearSRGBColorSpace);   // 写真の平均（リニア値）で割って、グレー（#717577 前後）にする
+}
+function table() {
+  const g = new THREE.Group(), W = 1.8, D = 0.9, H = 0.72;
+  g.add(at(box(T.top, W, 0.012, D), 0, H - 0.006, 0));
+  for (const sz of [-1, 1]) g.add(at(box(T.frame, W - 0.16, 0.05, 0.02), 0, H - 0.04, sz * (D / 2 - 0.06)));   // 幕板（長手）
+  for (const sx of [-1, 1]) g.add(at(box(T.frame, 0.02, 0.05, D - 0.16), sx * (W / 2 - 0.08), H - 0.04, 0));   // 幕板（短手）
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(at(box(T.frame, 0.06, H - 0.012, 0.06), sx * (W / 2 - 0.08), (H - 0.012) / 2, sz * (D / 2 - 0.08)));   // 脚
   return g;
 }
 // ---- キッチンの細かい所（シンク・水栓・IH・レンジフード・ガラスのガード・扉の目地）----
@@ -60,7 +93,7 @@ const K = {
   ih: new THREE.MeshStandardMaterial({ color: 0x0d0d0f, roughness: 0.12, metalness: 0.1 }),
   ring: new THREE.MeshStandardMaterial({ color: 0x5a5d61, roughness: 0.4, emissive: 0x3a0a05, emissiveIntensity: 0.6 }),
   glass: new THREE.MeshStandardMaterial({ color: 0xdfe8ea, roughness: 0.05, transparent: true, opacity: 0.22 }),
-  hood: new THREE.MeshStandardMaterial({ color: 0xd2d3d4, roughness: 0.6, metalness: 0.05 }),
+  hood: new THREE.MeshStandardMaterial({ color: 0xaeb0b2, roughness: 0.75, metalness: 0.2 }),   // 銀色のツヤ消し（11/20）
   groove: new THREE.MeshStandardMaterial({ color: 0x1b1b1c, roughness: 0.8 }),
 };
 // 平面図の cm と高さ m で箱を置く
@@ -96,7 +129,6 @@ export function addKitchenDetails(furn, FL1) {
   // カップボード（南面 y=60）：下の扉と引き出しの目地、吊戸棚（前面 y=43）の扉の目地
   for (let x = 653; x < 856; x += 50.6) kbox(g, K.groove, x - 0.3, 60, x + 0.3, 60.6, 0.1, 0.83, FL1);
   for (const h of [0.36, 0.60]) kbox(g, K.groove, 605, 60, 854, 60.6, h - 0.003, h + 0.003, FL1);
-  for (let x = 653; x < 856; x += 50.6) kbox(g, K.groove, x - 0.3, 43, x + 0.3, 43.6, 1.52, 2.18, FL1);
   furn.add(g);
 }
 // ---- ラグ（グレーの毛足のある感じ。白い線で大きな区切り模様）----
@@ -154,6 +186,7 @@ export function addSimpleFurniture(furn, FL1) {
   // ラグ（extras 側で作られる）を見つけたら見た目を替える
   const tryRug = () => { const d = window._dbg; if (!(d && styleRug(d.rig))) setTimeout(tryRug, 500); };
   tryRug();
-  for (const x of [447.5, 502.5, 557.5]) { put(chair(), x, 153, 0); put(chair(), x, 272, Math.PI); }
+  put(table(), 501.5, 212.5, 0);
+  for (const x of [441.5, 501.5, 561.5]) { put(chair(), x, 150, 0); put(chair(), x, 275, Math.PI); }
   addKitchenDetails(furn, FL1);
 }

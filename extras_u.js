@@ -208,7 +208,7 @@ export function initExtras(ctx) {
   const interior = new THREE.Group(); rig.add(interior);
   const rug = boxAt(new THREE.MeshStandardMaterial({ color: 0xcfc6b8, roughness: 1 }), 3.17 - 0.9, 3.17 + 0.9, FL1, FL1 + 0.008, 1.06 - 0.7, 1.06 + 0.7);
   const tvb = boxAt(new THREE.MeshStandardMaterial({ color: 0x5b4332, roughness: 0.6 }), 4.33, 4.73, FL1, FL1 + 0.38, 0.05, 1.85);
-  rug.name = 'rug'; interior.add(rug, tvb); shadow(interior);
+  rug.name = 'rug'; interior.add(rug); shadow(interior);
 
   // カーテン（リビング南の掃き出し窓。開いた状態は両脇に寄せる）
   const WIN = { x0: PX(645.5), x1: PX(901.5), z: PZ(637) - 0.17 };
