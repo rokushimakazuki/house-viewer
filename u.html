@@ -176,7 +176,7 @@
   <div class="row">
     <select id="vp"></select>
     <button data-f="full" class="on">吹抜け通常</button><button data-f="half">ハーフ</button><button data-f="flat">なし</button>
-    <button id="wide" title="画角を切り替える">標準</button>
+    <button id="wide" title="画角を切り替える" class="on">超広角</button>
   </div>
   <div class="row">
     <span class="grp" id="grpv"><span>高窓の高さ</span><button data-v="A" class="on">A 低め</button><button data-v="B">B 高め</button></span>
@@ -906,7 +906,7 @@ const WIDE = [
   { name: '広角', h: 90, min: 40, max: 125 },
   { name: '超広角', h: 110, min: 40, max: 135 },
 ];
-inside.wide = 0;
+inside.wide = 2;
 function fitFov() {
   const w = WIDE[inside.wide], a = innerWidth / innerHeight, h = THREE.MathUtils.degToRad(w.h);
   const v = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(h / 2) / a));

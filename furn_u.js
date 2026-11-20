@@ -25,14 +25,14 @@ function rbox(mat, w, h, d, r = 0.03) {
 function box(mat, w, h, d) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.castShadow = m.receiveShadow = true; return m; }
 function at(o, x, y, z) { o.position.set(x, y, z); return o; }
 
-// 3人掛けのソファ（幅 2.0m・奥行 0.88m・座面 0.42m・背 0.78m）。前＝+z
+// 2人掛けのソファ（幅 1.6m・奥行 0.82m・座面 0.42m・背 0.75m）。前＝+z（11/20 小さめに）
 function sofa() {
-  const g = new THREE.Group(), W = 2.0, D = 0.88;
+  const g = new THREE.Group(), W = 1.6, D = 0.82;
   g.add(at(rbox(M.sofa, W, 0.22, D, 0.03), 0, 0.23, 0));                       // 台
-  g.add(at(rbox(M.sofa, W - 0.1, 0.42, 0.2, 0.05), 0, 0.55, -D / 2 + 0.12));    // 背もたれ
+  g.add(at(rbox(M.sofa, W - 0.1, 0.4, 0.2, 0.05), 0, 0.54, -D / 2 + 0.12));    // 背もたれ
   for (const sx of [-1, 1]) g.add(at(rbox(M.sofa, 0.16, 0.36, D, 0.04), sx * (W / 2 - 0.08), 0.42, 0));   // ひじ掛け
-  for (const k of [-1, 0, 1]) g.add(at(rbox(M.cushion, 0.54, 0.1, D - 0.24, 0.035), k * 0.56, 0.39, 0.08));   // 座面クッション
-  for (const k of [-1, 0, 1]) g.add(at(rbox(M.cushion, 0.54, 0.38, 0.14, 0.05), k * 0.56, 0.6, -D / 2 + 0.26));   // 背クッション
+  for (const k of [-0.5, 0.5]) g.add(at(rbox(M.cushion, 0.62, 0.1, D - 0.24, 0.035), k * 0.64, 0.39, 0.08));   // 座面クッション
+  for (const k of [-0.5, 0.5]) g.add(at(rbox(M.cushion, 0.62, 0.36, 0.14, 0.05), k * 0.64, 0.59, -D / 2 + 0.26));   // 背クッション
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(at(box(M.leg, 0.03, 0.12, 0.03), sx * (W / 2 - 0.06), 0.06, sz * (D / 2 - 0.06)));
   return g;
 }
