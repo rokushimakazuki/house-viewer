@@ -55,6 +55,41 @@ function tint(m, name, col) {
   const mean = PHOTO_MEAN[name];
   m.color.setRGB(c.r / mean[0], c.g / mean[1], c.b / mean[2], THREE.LinearSRGBColorSpace);
 }
+// 写真の木（オーク）を切り貼りして作る模様。読み込むまでは平均の色。色はあとで材料の色を掛ける（tint）
+function woodCanvas(key, draw, rx = 1, ry = 1, rot = 0) {
+  if (cache[key]) return cache[key];
+  const c = document.createElement('canvas'); c.width = c.height = 1024;
+  const g = c.getContext('2d'); g.fillStyle = '#a2754f'; g.fillRect(0, 0, 1024, 1024);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace;
+  if (rot) { t.center.set(0.5, 0.5); t.rotation = rot; }
+  const img = new Image();
+  img.onload = () => { draw(g, img); t.needsUpdate = true; const d = window._dbg; d && d.ext && d.ext.invalidate && d.ext.invalidate(); };
+  img.src = 'assets/tex/oak_wood_planks_diff.jpg';
+  return (cache[key] = t);
+}
+// ヘリンボーン張り：幅9cm・長さ36cm の板。1枚の絵＝72cm 角（板 8枚分で繰り返す）、床に 45° で貼る
+const herringTex = () => woodCanvas('herring', (g, img) => {
+  const w = 128, L = 4 * w, r = rnd(17);
+  const plank = (x, y, horiz) => {
+    const sx = r() * (1024 - 512), sy = r() * (1024 - 128);
+    for (const ox of [-1024, 0, 1024]) for (const oy of [-1024, 0, 1024]) {
+      g.save(); g.translate(x + ox, y + oy);
+      if (horiz) g.drawImage(img, sx, sy, 512, 128, 0, 0, L, w);
+      else { g.translate(w, 0); g.rotate(Math.PI / 2); g.drawImage(img, sx, sy, 512, 128, 0, 0, L, w); }
+      g.strokeStyle = 'rgba(30,20,12,0.6)'; g.lineWidth = 2; g.strokeRect(0, 0, L, w);
+      g.restore();
+    }
+  };
+  for (let n = -2; n <= 2; n++) for (let k = -1; k < 9; k++) { plank((k + 8 * n) * w, k * w, true); plank((k + 8 * n) * w, (k + 1) * w, false); }
+}, 1.2 / 0.72 * 0.6 / 0.6, 1.2 / 0.72, Math.PI / 4);
+// 木のルーバー（縦の細い板と、奥の暗いすき間）。1枚の絵＝約2m
+const louverTex = () => woodCanvas('louver', (g, img) => {
+  g.fillStyle = '#1a140e'; g.fillRect(0, 0, 1024, 1024);
+  const r = rnd(23);
+  // 壁では絵の縦横が入れ替わるので、絵の上では横向きの帯 → 壁で縦の板 … のはずが逆だったため、縦の帯で描く
+  for (let x = 0; x < 1024; x += 40) { const sy = r() * (1024 - 40); g.save(); g.translate(x + 31, 0); g.rotate(Math.PI / 2); g.drawImage(img, 0, sy, 1024, 30, 0, 0, 1024, 31); g.restore(); }
+});
 // クロス（壁紙）：色はほぼ一様、ごく細かい粒だけ（1枚の絵＝1m 角）
 const clothTex = (col) => canvasTex('cl' + col, 512, 512, (g, W, H) => {
   const r = rnd(9);
@@ -95,8 +130,8 @@ const sidingTex = (col) => canvasTex('siding' + col, 1024, 512, (g, W, H) => {
 });
 
 // 大理石（グレーに近い黒）：地の色むら＋白っぽい太い筋＋細い筋
-const marbleTex = () => canvasTex('marble', 1024, 1024, (g, W, H) => {
-  const r = rnd(41), base = 0x2e2f31;
+const marbleTex = (base = 0x2e2f31, vc = 0xcdcdc8) => canvasTex('marble' + base + '_' + vc, 1024, 1024, (g, W, H) => {
+  const r = rnd(41);
   g.fillStyle = hex(base); g.fillRect(0, 0, W, H);
   for (let i = 0; i < 70; i++) {
     const x = r() * W, y = r() * H, rad = 60 + r() * 220, k = (r() - 0.5) * 16;
@@ -109,7 +144,7 @@ const marbleTex = () => canvasTex('marble', 1024, 1024, (g, W, H) => {
       for (let k = 0; k < 40; k++) { ang += (r() - 0.5) * 0.5; x += Math.cos(ang) * 30; y += Math.sin(ang) * 30; pts.push([x, y]); }
       wrapDraw(g, W, H, () => {
         for (const [lw, la] of [[w * 4, a * 0.15], [w * 2, a * 0.3], [w, a]]) {
-          g.strokeStyle = `rgba(205,205,200,${la})`; g.lineWidth = lw; g.beginPath();
+          g.strokeStyle = rgb(vc, 0, la); g.lineWidth = lw; g.beginPath();
           pts.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py))); g.stroke();
         }
       });
@@ -128,6 +163,7 @@ if (!TOPS[topSel]) topSel = 'pattern';
 //   wood（写真の木を染め直す：素材名・色・木目の強さ）／concrete（写真のコンクリートを染め直す：色・強さ）
 //   cloth（クロス）／tile（600角タイル）／stone（石目・エコカラット調）
 // 木の床は「オークの挽き板」（oak_wood_planks・幅広）と「細めの板」（wood_floor）の2種類
+const OAK = 'oak_wood_planks';   // 写真の木（パターンと候補の両方で使う）
 export const PATTERNS = {
   orig: { name: 'はじめの色' },
   p1: { name: '① グレー×木の床', note: '薄いグレーのクロス、オークの挽き板の床、テレビの壁はグレーの石目タイル（エコカラット調）、キッチンはコンクリート調、扉は濃いグレー（写真1の雰囲気）',
@@ -146,6 +182,30 @@ export const PATTERNS = {
     floor: ['wood', 'oak_wood_planks', 0x5c3c2a, 1.1], wall: ['cloth', 0xc2b6a4], ceiling: ['cloth', 0xd0c6b7], accent: ['wood', 'oak_wood_planks', 0x8a6246, 1.0], woodceil: ['wood', 'oak_wood_planks', 0x5c3c2a, 1.1],
     oriage: ['wood', 'oak_wood_planks', 0x8a6246, 1.0], tread: 0x5a3b26, riser: 0x46301f, kitchen: 0x1e1f21, counter: ['concrete', 0x333437, 1.1], door: 0x1e1f21, frame: 0x1e1f21,
     steel: 0x18191a, baseboard: 0x2e2f31, siding: 0xe6e3dd, roof: 0x2b2c2e, soffit: 0x5a3b26 },
+  p5: { name: '⑤ ホテルライク（グレー×石）', note: '大判のグレーのタイル、グレーのクロス、テレビの壁は石目（エコカラット調）、下り天井はチャコール、キッチンはグレージュの扉にグレーのセラミックの天板',
+    floor: ['tile', 0x6f6c69], wall: ['cloth', 0xc9c6c1], ceiling: ['cloth', 0xd6d3ce], accent: ['stone', 0x8d8a86], woodceil: ['cloth', 0x4a4a4b], tread: ['plain', 0x3d3e40, 0.6], oriage: ['cloth', 0x8f8c88], riser: ['plain', 0x3d3e40, 0.6],
+    kitchen: ['plain', 0xbdb6aa, 0.5], counter: ['plain', 0x5a5b5d, 0.55], door: ['plain', 0xbdb6aa, 0.5], table: ['plain', 0x2b2b2b, 0.5], chair_wood: ['plain', 0x222222, 0.6], chair_seat: ['plain', 0x8d8a85, 1], sofa: ['plain', 0x9d978d, 1], rug: ['tint', 0xffffff, 1.6], tatami: ['tint', 0xb4b4ae],
+    frame: 0x262728, steel: 0x1c1d1e, baseboard: 0x8f8c88, siding: 0x5d5f62, roof: 0x2b2c2e, soffit: 0x3a3b3c },
+  p6: { name: '⑥ ジャパンディ（生成り×白木）', note: '生成りの壁、白木のオークの床、テレビの壁は木のルーバー、木の下り天井、キッチンは明るい木目。黒は窓の枠などに少しだけ',
+    floor: ['wood', OAK, 0xb48a62, 0.9], wall: ['cloth', 0xe2dccf], ceiling: ['cloth', 0xe8e3d8], accent: ['louver', 0xa77d55], woodceil: ['wood', OAK, 0xb08458, 1.0], tread: ['wood', OAK, 0xa87a4d, 1.0], oriage: ['cloth', 0xe2d8c3], riser: ['wood', OAK, 0xa87a4d, 1.0],
+    kitchen: ['wood', OAK, 0xb08a60, 1.0], counter: ['plain', 0xe8e4dc, 0.35], door: ['wood', OAK, 0xb08a60, 1.0], table: ['wood', OAK, 0x9a7350, 1.0], chair_wood: ['plain', 0xa57a52, 0.7], chair_seat: ['plain', 0xc9bda6, 1], sofa: ['plain', 0xc2b8a3, 1], rug: ['tint', 0xffe2b8, 2.0], tatami: ['tint', 0xffffff],
+    frame: 0x262728, steel: 0x1c1d1e, baseboard: 0xb08a60, siding: 0xcfc9bd, roof: 0x2b2c2e, soffit: 0xa87a4d },
+  p7: { name: '⑦ 北欧ナチュラル（白×明るい木×ネイビー）', note: '白い壁、明るい木の床と板張りの天井、テレビの壁はネイビー、キッチンは白に木のカウンター',
+    floor: ['wood', OAK, 0xbf9a72, 0.9], wall: ['cloth', 0xe4e3df], ceiling: ['wood', OAK, 0xc8a47a, 0.9], accent: ['cloth', 0x3d4f63], woodceil: ['wood', OAK, 0xc49a6c, 0.9], tread: ['wood', OAK, 0xc49a6c, 0.9], oriage: ['wood', OAK, 0xc8a47a, 0.9], riser: ['wood', OAK, 0xc49a6c, 0.9],
+    kitchen: ['plain', 0xeeece7, 0.4], counter: ['wood', OAK, 0xb58b5f, 1.0], door: ['plain', 0xeeece7, 0.5], table: ['wood', OAK, 0xc49a6c, 0.9], chair_wood: ['plain', 0xc49a6c, 0.7], chair_seat: ['plain', 0x7f8a76, 1], sofa: ['plain', 0x8f9a8c, 1], rug: ['tint', 0xfff4e2, 2.3], tatami: ['tint', 0xffffff],
+    frame: 0xe6e3dd, steel: 0x2a2b2c, baseboard: 0xe4e3df, siding: 0xe6e3dd, roof: 0x2f3033, soffit: 0xb3875a },
+  p8: { name: '⑧ インダストリアル（モルタル×黒×古木）', note: 'モルタル調の床、コンクリート調の天井とテレビの壁、濃い古木の下り天井、黒のキッチンにステンレスの天板、キャメルの革風ソファ',
+    floor: ['concrete', 0x63625f, 1.2], wall: ['cloth', 0xbab7b1], ceiling: ['concrete', 0x9c9a96, 1.0], accent: ['concrete', 0x58595b, 1.3], woodceil: ['wood', OAK, 0x4e3423, 1.2], tread: ['plain', 0x1e1e1e, 0.6], oriage: ['concrete', 0x8a8986, 1.0], riser: ['plain', 0x1e1e1e, 0.6],
+    kitchen: ['plain', 0x232425, 0.5], counter: ['metal', 0xb5b8bb], door: ['plain', 0x2a2b2d, 0.5], table: ['wood', OAK, 0x5c3c2a, 1.1], chair_wood: ['plain', 0x1e1e1e, 0.6], chair_seat: ['plain', 0x8a6a4c, 1], sofa: ['plain', 0x8a5e3e, 1], rug: ['tint', 0x9a948c], tatami: ['tint', 0xb4b4ae],
+    frame: 0x1e1f21, steel: 0x141516, baseboard: 0x2a2b2d, siding: 0x2a2c2e, roof: 0x1e1f21, soffit: 0x4e3423 },
+  p9: { name: '⑨ ウォールナット×黒大理石', note: 'ウォールナットのヘリンボーン張りの床、テレビの壁はウォールナットのルーバー、ウォールナットのキッチンに黒の大理石の天板。重厚で落ち着いた感じ',
+    floor: ['herring', 0x5c3c2a], wall: ['cloth', 0xc9c3b9], ceiling: ['cloth', 0xd9d4cb], accent: ['louver', 0x5c3c2a], woodceil: ['wood', OAK, 0x5c3c2a, 1.1], tread: ['wood', OAK, 0x4e3423, 1.1], oriage: ['wood', OAK, 0x5c3c2a, 1.1], riser: ['wood', OAK, 0x4e3423, 1.1],
+    kitchen: ['wood', OAK, 0x4e3423, 1.1], counter: ['marble'], door: ['wood', OAK, 0x5c3c2a, 1.1], table: ['wood', OAK, 0x5c3c2a, 1.1], chair_wood: ['plain', 0x3b2a1e, 0.7], chair_seat: ['plain', 0x2a2a2a, 1], sofa: ['plain', 0x4d4c4a, 1], rug: ['tint', 0x8a8a8a], tatami: ['tint', 0xb4b4ae],
+    frame: 0x1e1f21, steel: 0x18191a, baseboard: 0x3b2a1e, siding: 0x2a2c2e, roof: 0x1e1f21, soffit: 0x5c3c2a },
+  p10: { name: '⑩ 白×アイボリー（韓国風）', note: '白とアイボリーでまとめ、床は淡い木、キッチンは白に白の大理石の天板、ソファとラグはアイボリー',
+    floor: ['wood', OAK, 0xc7ad8c, 0.8], wall: ['cloth', 0xece8df], ceiling: ['cloth', 0xf0ede6], accent: ['cloth', 0xe2d9c8], woodceil: ['plain', 0xece8df, 0.7], tread: ['plain', 0xe8e3d8, 0.6], oriage: ['cloth', 0xece8df], riser: ['plain', 0xe8e3d8, 0.6],
+    kitchen: ['plain', 0xf0eee9, 0.4], counter: ['marble', 0xe9e7e2, 0xb9b9b5], door: ['plain', 0xf0eee9, 0.5], table: ['plain', 0xf0eee9, 0.4], chair_wood: ['plain', 0xd8c7ad, 0.7], chair_seat: ['plain', 0xece4d4, 1], sofa: ['plain', 0xe6dfd2, 1], rug: ['tint', 0xfff4e2, 2.6], tatami: ['tint', 0xffffff],
+    frame: 0xe6e3dd, steel: 0x2a2b2c, baseboard: 0xece8df, siding: 0xe6e3dd, roof: 0x2f3033, soffit: 0xe8e3d8 },
 };
 // 材料ごとの、絵1枚の大きさの調整（GLB の UV は floor＝1.2m、wall・ceiling＝1m、accent・woodceil＝0.6m 単位）
 // 写真の木は1枚＝約2m（オーク）にしたいので floor は 0.6
@@ -181,28 +241,41 @@ const SPEC_KEYS = ['floor', 'wall', 'ceiling', 'accent', 'woodceil', 'oriage', '
 // ---- タップで選べる候補（材料の名前ごと）----
 // 書き方：['wood', 写真, 色, 木目の強さ] ／ ['cloth', 色] ／ ['concrete', 色, 強さ] ／ ['tile', 色] ／ ['stone', 色]
 //        ['marble'] ／ ['plain', 色, 粗さ] ／ ['tint', 色]（今の模様のまま色を掛ける） ／ ['siding', 色]
-const OAK = 'oak_wood_planks';
-const WOODS = [['明るい木', ['wood', OAK, 0xb3875a, 1.0]], ['中間の木', ['wood', OAK, 0x8a6246, 1.0]], ['濃い木', ['wood', OAK, 0x5c3c2a, 1.1]], ['黒', ['plain', 0x262626, 0.6]]];
+// 木の色（明るい順）
+const W_LIGHT = 0xc8a47a, W_NAT = 0xa57a52, W_TEAK = 0x8a5a34, W_MID = 0x8a6246, W_WAL = 0x5c3c2a, W_DARK = 0x3b2a1e;
+const WOODS = [['白木（明るい）', ['wood', OAK, W_LIGHT, 0.9]], ['ナチュラル', ['wood', OAK, W_NAT, 1.0]], ['チーク', ['wood', OAK, W_TEAK, 1.0]], ['中間の木', ['wood', OAK, W_MID, 1.0]],
+  ['ウォールナット', ['wood', OAK, W_WAL, 1.1]], ['ダークブラウン', ['wood', OAK, W_DARK, 1.1]], ['グレージュ塗装', ['plain', 0xb3aa9c, 0.6]], ['白', ['plain', 0xe8e5df, 0.6]], ['黒', ['plain', 0x262626, 0.6]]];
+const CLOTHS = [['白', ['cloth', 0xdedcd8]], ['オフホワイト（生成り）', ['cloth', 0xe4ddcf]], ['薄いグレー', ['cloth', 0xb6b4b0]], ['グレージュ', ['cloth', 0xc4bbad]], ['ベージュ', ['cloth', 0xcdbfa6]],
+  ['モカ', ['cloth', 0x8f7a68]], ['濃いグレー', ['cloth', 0x7d7b78]], ['チャコール', ['cloth', 0x4a4a4b]], ['くすみグリーン（セージ）', ['cloth', 0x8f9a86]], ['ネイビー', ['cloth', 0x3d4f63]],
+  ['テラコッタ', ['cloth', 0xb06a4c]], ['白い塗り壁', ['concrete', 0xd6d3cc, 0.7]], ['コンクリート調', ['concrete', 0x9c9a96, 1.2]], ['木の羽目板', ['wood', OAK, W_NAT, 1.0]]];
+const FABRIC = (pal) => pal.map(([n, c]) => [n, ['plain', c, 1.0]]);
 export const CHOICES = {
-  floor: { label: '床', opts: [['明るいオーク', ['wood', OAK, 0xa57a52, 1.1]], ['グレージュの木', ['wood', OAK, 0x8a7a66, 1.0]], ['ウォールナット', ['wood', OAK, 0x5c3c2a, 1.1]], ['グレーのタイル', ['tile', 0x6f6b67]]] },
-  wall: { label: '壁（クロス）', opts: [['白', ['cloth', 0xd8d6d2]], ['薄いグレー', ['cloth', 0xb6b4b0]], ['グレージュ', ['cloth', 0xc4bbad]], ['濃いグレー', ['cloth', 0x7d7b78]]] },
-  ceiling: { label: '天井', opts: [['白', ['cloth', 0xdedcd8]], ['グレー', ['cloth', 0xb4b2ae]], ['木', ['wood', OAK, 0xa87a4d, 1.0]]] },
-  accent: { label: 'テレビの壁', opts: [['石目（エコカラット調）', ['stone', 0x76787b]], ['木', ['wood', OAK, 0x8a6246, 1.0]], ['グレーの塗り壁', ['concrete', 0x76797c, 1.4]], ['黒の塗り壁', ['concrete', 0x3a3b3d, 1.2]]] },
-  woodceil: { label: '木の部分（下り天井・梁・柱）', opts: WOODS },
+  floor: { label: '床', opts: [['白木のオーク', ['wood', OAK, W_LIGHT, 0.9]], ['ナチュラルオーク', ['wood', OAK, W_NAT, 1.1]], ['グレージュの木', ['wood', OAK, 0x8a7a66, 1.0]], ['アッシュグレー', ['wood', OAK, 0x8f8c86, 0.9]],
+    ['チーク', ['wood', OAK, W_TEAK, 1.0]], ['ウォールナット', ['wood', OAK, W_WAL, 1.1]], ['ヘリンボーン（オーク）', ['herring', W_NAT]], ['ヘリンボーン（ウォールナット）', ['herring', W_WAL]],
+    ['グレーのタイル', ['tile', 0x6f6b67]], ['ベージュのタイル', ['tile', 0x9a8f80]], ['濃いグレーのタイル', ['tile', 0x4a4948]], ['モルタル調', ['concrete', 0x63625f, 1.2]]] },
+  wall: { label: '壁（クロス）', opts: CLOTHS },
+  ceiling: { label: '天井', opts: [['白', ['cloth', 0xdedcd8]], ['オフホワイト', ['cloth', 0xe4ddcf]], ['グレー', ['cloth', 0xb4b2ae]], ['チャコール', ['cloth', 0x4a4a4b]],
+    ['白木の板張り', ['wood', OAK, W_LIGHT, 0.9]], ['木の板張り', ['wood', OAK, W_NAT, 1.0]], ['濃い木の板張り', ['wood', OAK, W_WAL, 1.1]], ['コンクリート調', ['concrete', 0x9c9a96, 1.0]]] },
+  accent: { label: 'テレビの壁', opts: [['石目・グレー（エコカラット調）', ['stone', 0x76787b]], ['石目・ライトグレー', ['stone', 0xa6a5a1]], ['石目・ベージュ', ['stone', 0xa89b88]], ['石目・ダークグレー', ['stone', 0x4a4b4e]],
+    ['木のルーバー（明るい）', ['louver', W_NAT]], ['木のルーバー（ウォールナット）', ['louver', W_WAL]], ['木の板張り', ['wood', OAK, W_MID, 1.0]],
+    ['グレーの塗り壁', ['concrete', 0x76797c, 1.4]], ['黒の塗り壁', ['concrete', 0x3a3b3d, 1.2]], ['チャコールのクロス', ['cloth', 0x4a4a4b]], ['ネイビーのクロス', ['cloth', 0x3d4f63]], ['くすみグリーンのクロス', ['cloth', 0x8f9a86]], ['黒の大理石', ['marble']]] },
+  woodceil: { label: '木の部分（下り天井・梁・柱）', opts: [...WOODS, ['チャコールのクロス', ['cloth', 0x4a4a4b]]] },
   tread: { label: '格子・階段・和室の扉', opts: WOODS },
   riser: { label: '小上がりの側面', opts: WOODS },
-  oriage: { label: '和室の天井', opts: [['明るい木', ['wood', OAK, 0xb3875a, 1.0]], ['濃い木', ['wood', OAK, 0x6a4a34, 1.0]], ['グレー', ['cloth', 0x9e9c98]]] },
-  tatami: { label: '畳', opts: [['緑', ['tint', 0xffffff]], ['グレー（和紙畳）', ['tint', 0xb4b4ae]], ['黄金色', ['tint', 0xf2dc9a]]] },
-  kitchen: { label: 'キッチンの扉', opts: [['黒', ['plain', 0x1e1f21, 0.5]], ['グレーのコンクリート調', ['concrete', 0x6c6f72, 1.3]], ['白', ['plain', 0xe8e6e1, 0.4]], ['木', ['wood', OAK, 0x8a6246, 1.0]]] },
-  counter: { label: 'キッチンの天板', opts: [['黒の大理石', ['marble']], ['白', ['plain', 0xe9e7e2, 0.3]], ['グレーのコンクリート調', ['concrete', 0x86888b, 1.1]]] },
-  door: { label: 'ドア', opts: [['白', ['plain', 0xe6e3dd, 0.5]], ['木', ['wood', OAK, 0x9a7350, 1.0]], ['黒', ['plain', 0x1e1f21, 0.5]]] },
-  table: { label: 'ダイニングテーブル', opts: [['明るい木', ['wood', OAK, 0xb08a60, 1.0]], ['ウォールナット', ['wood', OAK, 0x5c3c2a, 1.1]], ['黒', ['plain', 0x222222, 0.5]]] },
-  chair_wood: { label: '椅子の木', opts: [['明るい木', ['plain', 0xa57a52, 0.7]], ['濃い木', ['plain', 0x4e3423, 0.7]], ['黒', ['plain', 0x222222, 0.6]]] },
-  chair_seat: { label: '椅子の座面', opts: [['グレー', ['plain', 0x77736d, 1.0]], ['ベージュ', ['plain', 0xb5a88f, 1.0]], ['黒', ['plain', 0x2a2a2a, 1.0]]] },
-  sofa: { label: 'ソファ', opts: [['明るいグレー', ['plain', 0x8e8a84, 1.0]], ['ベージュ', ['plain', 0xb3a78f, 1.0]], ['濃いグレー', ['plain', 0x4d4c4a, 1.0]]] },
-  rug: { label: 'ラグ', opts: [['グレー', ['tint', 0xffffff]], ['濃いグレー', ['tint', 0x8a8a8a]], ['ベージュ', ['tint', 0xe8d6b4]]] },
-  siding: { label: '外壁', opts: [['黒', ['siding', 0x3a3d40]], ['グレー', ['siding', 0x8a8c8e]], ['白', ['siding', 0xe6e3dd]]] },
-  frame: { label: '窓の枠', opts: [['黒', ['plain', 0x262728, 0.45]], ['白', ['plain', 0xe6e3dd, 0.45]], ['ブロンズ', ['plain', 0x5a4a3c, 0.45]]] },
+  oriage: { label: '和室の天井', opts: [['白木', ['wood', OAK, W_LIGHT, 0.9]], ['ナチュラル', ['wood', OAK, W_NAT, 1.0]], ['濃い木', ['wood', OAK, 0x6a4a34, 1.0]], ['グレー', ['cloth', 0x9e9c98]], ['白', ['cloth', 0xdedcd8]], ['黒', ['cloth', 0x2c2c2d]], ['和紙調（生成り）', ['cloth', 0xe2d8c3]]] },
+  tatami: { label: '畳', opts: [['緑', ['tint', 0xffffff]], ['グレー（和紙畳）', ['tint', 0xb4b4ae]], ['黄金色', ['tint', 0xf2dc9a]], ['生成り', ['tint', 0xf0e4c8]], ['墨色', ['tint', 0x5c5c58]], ['うぐいす', ['tint', 0xc8d0a0]]] },
+  kitchen: { label: 'キッチンの扉', opts: [['白', ['plain', 0xe8e6e1, 0.4]], ['グレージュ', ['plain', 0xbdb6aa, 0.5]], ['ライトグレー', ['plain', 0xb4b5b5, 0.5]], ['チャコール', ['plain', 0x4a4b4d, 0.5]], ['黒', ['plain', 0x1e1f21, 0.5]],
+    ['コンクリート調', ['concrete', 0x6c6f72, 1.3]], ['明るい木目', ['wood', OAK, W_NAT, 1.0]], ['ウォールナット木目', ['wood', OAK, W_WAL, 1.1]], ['くすみグリーン', ['plain', 0x7f8a76, 0.5]], ['ネイビー', ['plain', 0x2f3e52, 0.5]]] },
+  counter: { label: 'キッチンの天板', opts: [['黒の大理石', ['marble']], ['白の大理石', ['marble', 0xe6e4df, 0x9d9d99]], ['グレーの大理石', ['marble', 0x8d8c89, 0xe0dfda]], ['グレーのセラミック（マット）', ['plain', 0x5a5b5d, 0.55]],
+    ['白', ['plain', 0xe9e7e2, 0.3]], ['ステンレス', ['metal', 0xb5b8bb]], ['コンクリート調', ['concrete', 0x86888b, 1.1]], ['木のカウンター', ['wood', OAK, W_NAT, 1.0]]] },
+  door: { label: 'ドア', opts: [['白', ['plain', 0xe6e3dd, 0.5]], ['グレージュ', ['plain', 0xbdb6aa, 0.5]], ['ライトグレー', ['plain', 0xb4b5b5, 0.5]], ['明るい木', ['wood', OAK, W_NAT, 1.0]], ['ウォールナット', ['wood', OAK, W_WAL, 1.1]], ['黒', ['plain', 0x1e1f21, 0.5]]] },
+  table: { label: 'ダイニングテーブル', opts: [['白木のオーク', ['wood', OAK, W_LIGHT, 0.9]], ['ナチュラル', ['wood', OAK, 0xb08a60, 1.0]], ['ウォールナット', ['wood', OAK, W_WAL, 1.1]], ['黒', ['plain', 0x222222, 0.5]], ['白', ['plain', 0xe8e6e1, 0.4]], ['白の大理石', ['marble', 0xe6e4df, 0x9d9d99]], ['黒の大理石', ['marble']]] },
+  chair_wood: { label: '椅子の木', opts: [['白木', ['plain', 0xc8a47a, 0.7]], ['ナチュラル', ['plain', 0xa57a52, 0.7]], ['ウォールナット', ['plain', 0x4e3423, 0.7]], ['黒', ['plain', 0x222222, 0.6]], ['白', ['plain', 0xe8e6e1, 0.6]]] },
+  chair_seat: { label: '椅子の座面', opts: FABRIC([['グレー', 0x77736d], ['ベージュ', 0xb5a88f], ['アイボリー', 0xe2dccf], ['黒', 0x2a2a2a], ['キャメル（革風）', 0x9a6a42], ['くすみグリーン', 0x7f8a76], ['ネイビー', 0x2f3e52]]) },
+  sofa: { label: 'ソファ', opts: FABRIC([['明るいグレー', 0x8e8a84], ['ベージュ', 0xb3a78f], ['アイボリー', 0xd9d2c4], ['チャコール', 0x4d4c4a], ['くすみグリーン', 0x7f8a76], ['ネイビー', 0x2f3e52], ['キャメル', 0x9a6a42]]) },
+  rug: { label: 'ラグ', opts: [['グレー', ['tint', 0xffffff]], ['濃いグレー', ['tint', 0x8a8a8a]], ['ライトグレー', ['tint', 0xffffff, 1.7]], ['ベージュ', ['tint', 0xffe2b8, 2.0]], ['アイボリー', ['tint', 0xfff4e2, 2.6]], ['くすみグリーン', ['tint', 0xc8dcb4, 1.5]], ['ネイビー', ['tint', 0x8aa0c8, 0.9]], ['テラコッタ', ['tint', 0xffa880, 1.8]]] },
+  siding: { label: '外壁', opts: [['黒', ['siding', 0x3a3d40]], ['チャコール', ['siding', 0x55585b]], ['グレー', ['siding', 0x8a8c8e]], ['白', ['siding', 0xe6e3dd]], ['ベージュ', ['siding', 0xcfc6b6]], ['ネイビー', ['siding', 0x2f3e52]], ['木（焼杉風）', ['siding', 0x2a2420]]] },
+  frame: { label: '窓の枠', opts: [['黒', ['plain', 0x262728, 0.45]], ['白', ['plain', 0xe6e3dd, 0.45]], ['ブロンズ', ['plain', 0x5a4a3c, 0.45]], ['シルバー', ['metal', 0xb5b8bb]]] },
 };
 let OVR = {};
 try { OVR = JSON.parse(localStorage.getItem('design_u_ovr') || '{}'); } catch (e) { OVR = {}; }
@@ -210,8 +283,11 @@ function applySpec(m, v, n) {
   if (!Array.isArray(v)) { plain(m, v, 0.6); return; }
   const k = v[0];
   if (k === 'plain') plain(m, v[1], v[2] ?? 0.6);
-  else if (k === 'tint') { m.color.setHex(v[1]); m.needsUpdate = true; }
-  else if (k === 'marble') { m.map = marbleTex(); m.normalMap = null; m.roughnessMap = null; m.color.setHex(0xffffff); m.roughness = 0.22; m.metalness = 0; m.needsUpdate = true; }
+  else if (k === 'tint') { m.color.setHex(v[1]).multiplyScalar(v[2] ?? 1); m.needsUpdate = true; }   // v[2]＞1 で明るくもできる（グレーの模様をベージュ等にする）
+  else if (k === 'marble') { m.map = marbleTex(v[1], v[2]); m.normalMap = null; m.roughnessMap = null; m.color.setHex(0xffffff); m.roughness = 0.22; m.metalness = 0; m.needsUpdate = true; }
+  else if (k === 'metal') plain(m, v[1], 0.32, 0.85);
+  else if (k === 'herring') { m.map = herringTex(); m.normalMap = null; m.roughnessMap = null; m.metalness = 0; tint(m, 'oak_wood_planks', v[1]); m.roughness = 0.7; m.needsUpdate = true; }
+  else if (k === 'louver') { m.map = louverTex(); m.map.repeat.set(REP[n] ?? 1, REP[n] ?? 1); m.normalMap = null; m.roughnessMap = null; m.metalness = 0; tint(m, 'oak_wood_planks', v[1]); m.roughness = 0.85; m.needsUpdate = true; }
   else if (k === 'siding') { m.map = sidingTex(v[1]); m.normalMap = null; m.color.setHex(0xffffff); m.roughness = 0.8; m.needsUpdate = true; }
   else surface(m, v, n);
 }
@@ -227,7 +303,7 @@ function applyPattern(m, p) {
   if (!p.floor) { restore(m); return; }
   const v = p[n];
   if (v === undefined) return;
-  if (SPEC_KEYS.includes(n) && Array.isArray(v)) surface(m, v, n);
+  if (Array.isArray(v)) applySpec(m, v, n);
   else if (n === 'siding') { m.map = sidingTex(v); m.normalMap = null; m.color.setHex(0xffffff); m.roughness = 0.8; m.needsUpdate = true; }
   else if (n === 'frame' || n === 'steel') plain(m, v, 0.45, 0.3);
   else plain(m, v, n === 'counter' ? 0.35 : 0.6);
@@ -391,9 +467,20 @@ function partKeyOf(hit) {
 // ---- タップで色・素材を選ぶ ----
 // 1本指で軽くタップ（ほとんど動かさず 0.4 秒以内）したときだけ反応。なぞる・二本指は今まで通り
 const pop = document.createElement('div');
-pop.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:50;background:rgba(28,30,33,.94);color:#fff;border-radius:14px;padding:12px 12px 10px;max-width:92vw;box-shadow:0 6px 20px rgba(0,0,0,.4);display:none;font-size:15px';
+pop.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:50;background:rgba(28,30,33,.94);color:#fff;border-radius:14px;padding:12px 12px 10px;width:min(560px,92vw);max-height:55vh;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,.4);display:none;font-size:15px';
 document.body.append(pop);
 function closePop() { pop.style.display = 'none'; }
+// ボタンの色見本（候補の代表の色）
+const TINT_BASE = { rug: 0x6a6c6f, tatami: 0xb9b48c };   // 色を掛ける物の元の色（見本の色を出すため）
+function swatchOf(v, n) {
+  if (!Array.isArray(v)) return v;
+  const k = v[0];
+  if (k === 'tint') { const c = new THREE.Color(TINT_BASE[n] ?? 0x888888).multiply(new THREE.Color(v[1])).multiplyScalar(v[2] ?? 1); return c.getHex(); }
+  if (k === 'wood') return v[2];
+  if (k === 'marble') return v[1] ?? 0x2e2f31;
+  return v[1];
+}
+function chip(col) { return `<span style="display:inline-block;width:14px;height:14px;border-radius:4px;margin-right:6px;vertical-align:-2px;border:1px solid rgba(255,255,255,.35);background:${hex(col ?? 0x888888)}"></span>`; }
 function openPop(n, pkeyHit) {
   const c = CHOICES[n]; pop.innerHTML = '';
   const h = document.createElement('div'); h.style.cssText = 'font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between;gap:12px;align-items:center';
@@ -401,20 +488,20 @@ function openPop(n, pkeyHit) {
   const x = document.createElement('button'); x.textContent = '×'; x.style.cssText = 'background:none;border:0;color:#fff;font-size:22px;padding:0 4px'; x.onclick = closePop; h.append(x);
   pop.append(h);
   const row = document.createElement('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px';
-  const btn = (label, on, f) => { const b = document.createElement('button'); b.textContent = label; b.style.cssText = `padding:8px 12px;border-radius:10px;border:1px solid ${on ? '#e8792f' : '#555'};background:${on ? '#3a2a1f' : '#2c2f33'};color:${on ? '#ffb27a' : '#fff'};font-size:15px`; b.onclick = f; row.append(b); };
+  const btn = (label, on, f, col) => { const b = document.createElement('button'); b.innerHTML = (col != null ? chip(col) : '') + label; b.style.cssText = `padding:8px 12px;border-radius:10px;border:1px solid ${on ? '#e8792f' : '#555'};background:${on ? '#3a2a1f' : '#2c2f33'};color:${on ? '#ffb27a' : '#fff'};font-size:15px`; b.onclick = f; row.append(b); };
   if (pkeyHit) {   // 壁：この面だけ
     const cap = document.createElement('div'); cap.textContent = 'この面だけ'; cap.style.cssText = 'font-size:13px;color:#bbb;margin:2px 0 4px'; pop.append(cap);
     pop.append(row);
-    c.opts.forEach(([label], i) => btn(label, PARTS[pkeyHit] === i, () => { setPart(pkeyHit, i); openPop(n, pkeyHit); }));
+    c.opts.forEach(([label, v], i) => btn(label, PARTS[pkeyHit] === i, () => { setPart(pkeyHit, i); openPop(n, pkeyHit); }, swatchOf(v, n)));
     btn('元に戻す', PARTS[pkeyHit] == null, () => { setPart(pkeyHit, null); openPop(n, pkeyHit); });
     const cap2 = document.createElement('div'); cap2.textContent = '壁ぜんぶ'; cap2.style.cssText = 'font-size:13px;color:#bbb;margin:10px 0 4px'; pop.append(cap2);
     const row2 = document.createElement('div'); row2.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px'; pop.append(row2);
-    const btn2 = (label, on, f) => { const b = document.createElement('button'); b.textContent = label; b.style.cssText = `padding:8px 12px;border-radius:10px;border:1px solid ${on ? '#e8792f' : '#555'};background:${on ? '#3a2a1f' : '#2c2f33'};color:${on ? '#ffb27a' : '#fff'};font-size:15px`; b.onclick = f; row2.append(b); };
-    c.opts.forEach(([label], i) => btn2(label, OVR[n] === i, () => { setOverride(n, i); openPop(n, pkeyHit); }));
+    const btn2 = (label, on, f, col) => { const b = document.createElement('button'); b.innerHTML = (col != null ? chip(col) : '') + label; b.style.cssText = `padding:8px 12px;border-radius:10px;border:1px solid ${on ? '#e8792f' : '#555'};background:${on ? '#3a2a1f' : '#2c2f33'};color:${on ? '#ffb27a' : '#fff'};font-size:15px`; b.onclick = f; row2.append(b); };
+    c.opts.forEach(([label, v], i) => btn2(label, OVR[n] === i, () => { setOverride(n, i); openPop(n, pkeyHit); }, swatchOf(v, n)));
     btn2('パターンどおり', OVR[n] == null, () => { setOverride(n, null); openPop(n, pkeyHit); });
     pop.style.display = 'block'; return;
   }
-  c.opts.forEach(([label], i) => btn(label, OVR[n] === i, () => { setOverride(n, i); openPop(n); }));
+  c.opts.forEach(([label, v], i) => btn(label, OVR[n] === i, () => { setOverride(n, i); openPop(n); }, swatchOf(v, n)));
   btn('パターンどおり', OVR[n] == null, () => { setOverride(n, null); openPop(n); });
   pop.append(row); pop.style.display = 'block';
 }
