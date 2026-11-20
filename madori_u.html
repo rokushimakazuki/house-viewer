@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>間取り 11/20 プラン</title>
+<style>
+:root { --bg:#f3f5f7; --ink:#1f2328; --sub:#5b6570; --line:#d5dbe1; --acc:#1f6feb; --card:#fff; }
+* { box-sizing:border-box; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:-apple-system,"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif; }
+body { display:flex; flex-direction:column; }
+header { padding:10px 14px 8px; background:var(--card); border-bottom:1px solid var(--line); }
+h1 { font-size:17px; margin:0 0 8px; }
+.row { display:flex; gap:6px; flex-wrap:wrap; }
+button { font:inherit; font-size:14px; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); }
+button.on { background:var(--acc); border-color:var(--acc); color:#fff; font-weight:600; }
+.tabs button { flex:1; font-size:15px; padding:9px 0; }
+#v3d { flex:1; min-height:0; position:relative; display:flex; flex-direction:column; }
+#bar { padding:8px 14px; display:flex; gap:6px; flex-wrap:wrap; background:var(--card); border-bottom:1px solid var(--line); }
+#wrap { flex:1; min-height:0; position:relative; }
+canvas { display:block; width:100%; height:100%; touch-action:none; }
+#hint { position:absolute; left:10px; right:10px; bottom:calc(10px + env(safe-area-inset-bottom)); font-size:12px; color:var(--sub); background:rgba(255,255,255,.85); border-radius:8px; padding:6px 10px; pointer-events:none; }
+#v2d { flex:1; overflow:auto; padding:10px 10px 30px; display:none; }
+#v2d img { width:100%; height:auto; background:#fff; border:1px solid var(--line); border-radius:8px; }
+#v2d p { font-size:13px; color:var(--sub); margin:8px 4px; line-height:1.6; }
+#err { display:none; padding:20px; color:#b42318; }
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head>
+<body>
+<header>
+  <h1>間取り 11/20 プラン（上野さん案）　<a href="u.html" style="font-size:13px;font-weight:600;color:#d85a10;text-decoration:none">実物大で中から見る ▶</a></h1>
+  <div class="row tabs"><button id="t3" class="on">3D</button><button id="t2">平面図</button></div>
+</header>
+<div id="v3d">
+  <div id="bar">
+    <button data-f="1" class="on">1階</button><button data-f="2">2階</button><button data-f="b">両方</button>
+    <span style="flex:1"></span>
+    <button data-v="o" class="on">ななめ</button><button data-v="t">真上</button>
+    <button data-w="l" class="on">壁 低く</button><button data-w="h">壁 2.4m</button>
+  </div>
+  <div id="wrap"><canvas id="c"></canvas>
+    <div id="hint">指1本で回す／2本でつまんで拡大・移動。窓と屋根は入れていません。階段は踏み板だけ（回り段）。寸法は図面から読んだ近似。「両方」は奥が1階・手前が2階。</div>
+    <div id="err">3Dを表示できませんでした。「平面図」をご覧ください。</div>
+  </div>
+</div>
+<div id="v2d">
+  <a href="madori_u.png"><img src="madori_u.png" alt="1階と2階の平面図（プランシート 11/20）"></a>
+  <p>画像を押すと大きく開きます（つまんで拡大できます）。長押しで保存できます。</p>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+const D = {"W":10.5,"H":9,"floors":[{"rooms":[{"name":"ポーチ","kind":"外","rects":[[0,0,2,1.5]],"label":"ポーチ"},{"name":"シューズクローク","kind":"収納","rects":[[2,0,3.5,2.5]],"label":"シューズクローク"},{"name":"玄関","kind":"通路","rects":[[0,1.5,2,2.5]],"label":"玄関"},{"name":"ホール","kind":"通路","rects":[[0,2.5,2.5,4],[1.5,4,2.5,6]],"label":"ホール"},{"name":"手洗い","kind":"通路","rects":[[0,4,1.5,5]],"label":"手洗い"},{"name":"ホール南","kind":"通路","rects":[[1.5,6,2.5,7]],"label":"ホール南"},{"name":"トイレ","kind":"水回り","rects":[[0,5,1.5,6]],"label":"トイレ"},{"name":"収納(2)","kind":"収納","rects":[[0,6,1.5,7]],"label":"収納(2)"},{"name":"書類","kind":"書斎","rects":[[0,7,2.5,9]],"label":"書類"},{"name":"階段","kind":"階段","rects":[[2.5,4,3.5,6]],"label":"階段"},{"name":"収納(1)","kind":"収納","rects":[[2.5,6,3.5,7]],"label":"収納(1)"},{"name":"和室","kind":"和室","rects":[[3.5,4,6.5,7]],"label":"小上がり和室"},{"name":"LDK","kind":"LDK","rects":[[3.5,0,10.5,4],[2.5,2.5,3.5,4],[6.5,4,10.5,7]],"label":"LDK"}],"walls":[[[2.0,0.0,2.0,1.5],"ext"],[[3.5,0.0,3.5,2.5],"int"],[[3.5,4.95,3.5,6.1],"int"],[[3.5,6.9,3.5,7.0],"int"],[[10.5,0.0,10.5,7.0],"ext"],[[0.0,1.5,0.0,9.0],"ext"],[[2.0,1.5,2.0,1.55],"int"],[[2.5,2.5,2.5,2.7],"int"],[[2.5,3.5,2.5,7.0],"int"],[[1.5,5.0,1.5,5.1],"int"],[[1.5,5.9,1.5,6.1],"int"],[[1.5,6.9,1.5,7.0],"int"],[[2.5,7.0,2.5,9.0],"ext"],[[0.0,1.5,0.45,1.5],"ext"],[[1.45,1.5,2.0,1.5],"ext"],[[0.0,5.0,1.5,5.0],"int"],[[0.0,6.0,1.5,6.0],"int"],[[2.5,6.0,3.5,6.0],"int"],[[0.0,7.0,1.6,7.0],"int"],[[2.4,7.0,2.5,7.0],"int"],[[0.0,9.0,2.5,9.0],"ext"],[[2.0,0.0,10.5,0.0],"ext"],[[2.0,2.5,3.5,2.5],"int"],[[2.5,7.0,10.5,7.0],"ext"],[[0,0,0,1],"ext"]],"furn":[[1,"カップボード","kitchenCabinet",603,8,856,60,90,"S"],[1,"可動棚","bookcase",866,8,953,58,200,"S"],[1,"冷蔵庫(600L級)","fridgeFreezer",877,165,947,237,183,"W"],[1,"キッチン（シンク・IH）","kitchenCabinet",595,161,865,262,90,"N"],[1,"ダイニングテーブル","table",408,175,595,250,72,"S"],[1,"椅子","chair",425,133,470,173,85,"S"],[1,"椅子","chair",480,133,525,173,85,"S"],[1,"椅子","chair",535,133,580,173,85,"S"],[1,"椅子","chair",425,252,470,292,85,"N"],[1,"椅子","chair",480,252,525,292,85,"N"],[1,"椅子","chair",535,252,580,292,85,"N"],[1,"小上がり（高さ27cm）","texturableBox",323,369,587,632,27,"S"],[1,"ソファ","sofa2",640,410,728,620,85,"E"],[1,"ローテーブル","coffeeTable",770,450,820,545,40,"E"],[1,"テレビ台","flatTV",900,440,945,580,60,"W"],[1,"便器","toiletUnit",8,480,88,520,62,"E"],[1,"手洗い","washbasinWithCabinet",8,380,58,440,85,"E"],[1,"書類の机","desk",10,770,200,815,74,"N"]]},{"rooms":[{"name":"トイレ","kind":"水回り","rects":[[1,0,2,1.5]],"label":"トイレ"},{"name":"浴室","kind":"水回り","rects":[[2,0,4.5,2]],"label":"浴室"},{"name":"脱衣所","kind":"水回り","rects":[[2,2,4.5,3]],"label":"脱衣所"},{"name":"洗面所","kind":"水回り","rects":[[0,1.5,2,4]],"label":"洗面所"},{"name":"ランドリー","kind":"水回り","rects":[[0,4,1.5,7]],"label":"ランドリー"},{"name":"WIC","kind":"収納","rects":[[0,7,3,9]],"label":"WIC"},{"name":"廊下","kind":"通路","rects":[[2,3,7.5,4],[1.5,4,2.5,5.5]],"label":"廊下"},{"name":"洋室2","kind":"個室","rects":[[4.5,0,7.5,3]],"label":"洋室2"},{"name":"洋室3","kind":"個室","rects":[[7.5,0,10.5,4]],"label":"洋室3"},{"name":"洋室1","kind":"個室","rects":[[3.5,4,6.5,7]],"label":"洋室1"},{"name":"階段の吹抜け","kind":"吹抜","rects":[[2.5,4,3.5,7],[1.5,5.5,2.5,7]],"label":"階段の吹抜け"},{"name":"ハーフ吹抜け","kind":"半吹抜","rects":[[6.5,4,10.5,7]],"label":"ハーフ吹抜け"}],"walls":[[[1.0,0.0,1.0,1.5],"ext"],[[2.0,0.0,2.0,2.1],"int"],[[2.0,2.9,2.0,3.1],"int"],[[2.0,3.9,2.0,4.0],"int"],[[4.5,0.0,4.5,3.0],"int"],[[7.5,0.0,7.5,3.05],"int"],[[7.5,3.9,7.5,4.0],"int"],[[10.5,0.0,10.5,7.0],"ext"],[[0.0,1.5,0.0,9.0],"ext"],[[1.5,4.0,1.5,4.1],"int"],[[1.5,4.9,1.5,7.0],"int"],[[2.5,4.0,2.5,5.5],"rail"],[[3.5,4.0,3.5,7.0],"int"],[[6.5,4.0,6.5,7.0],"int"],[[3.0,7.0,3.0,9.0],"ext"],[[0.0,1.5,1.0,1.5],"ext"],[[0.0,4.0,2.0,4.0],"int"],[[4.45,4.0,10.5,4.0],"int"],[[0.0,7.0,0.6,7.0],"int"],[[1.4,7.0,3.0,7.0],"int"],[[0.0,9.0,3.0,9.0],"ext"],[[1.0,0.0,10.5,0.0],"ext"],[[1.0,1.5,1.1,1.5],"int"],[[1.9,1.5,2.0,1.5],"int"],[[1.5,5.5,2.5,5.5],"rail"],[[2.0,2.0,2.15,2.0],"int"],[[2.95,2.0,4.5,2.0],"int"],[[2.0,3.0,4.6,3.0],"int"],[[5.4,3.0,7.5,3.0],"int"],[[2.5,4.0,3.5,4.0],"rail"],[[3.0,7.0,10.5,7.0],"ext"]],"furn":[[2,"便器","toiletUnit",116,8,156,88,62,"S"],[2,"浴槽","fittedBath",310,20,395,175,60,"W"],[2,"洗面台","washbasinWithCabinet",8,285,63,345,90,"E"],[2,"ドラム式洗濯機","clothesWasher",20,380,85,445,105,"E"],[2,"ベッド","bed90x190",730,15,935,115,45,"E"],[2,"ベッド","bed90x190",730,120,935,220,45,"E"],[2,"ベッド","bed90x190",730,225,935,325,45,"E"],[2,"ベッド","bed90x190",466,15,671,115,45,"E"],[2,"ベッド","bed90x190",476,425,576,630,45,"S"]]}]};
+const M = 0.91, WH = 2.4, FL2 = 3.0;
+const COL = { 'LDK':0xfff3d6, '和室':0xdcebcb, '水回り':0xd5e6f7, '収納':0xe8e2d8, '個室':0xf2ede4, '通路':0xefefef, '階段':0xd0d0d0, '書斎':0xf5e0ec, '外':0xd9d9d9 };
+const FCOL = { kitchenCabinet:0xf5f5f2, fridgeFreezer:0xc9ced3, table:0xc9a36b, chair:0xb98d58, texturableBox:0xcfd8a8, sofa2:0x7d8fa6, coffeeTable:0xb98d58, flatTV:0x4a4a4a, toiletUnit:0xffffff, washbasinWithCabinet:0xffffff, fittedBath:0xffffff, clothesWasher:0xe9edf1, bed90x190:0xb7c7dd, desk:0xc9a36b };
+const q = s => document.querySelector(s);
+const canvas = q('#c'), wrap = q('#wrap');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ canvas, antialias:true, preserveDrawingBuffer:true }); }
+catch (e) { q('#err').style.display = 'block'; canvas.style.display = 'none'; throw e; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xeef2f6);
+const cam = new THREE.PerspectiveCamera(38, 1, 0.1, 300);
+const ctl = new OrbitControls(cam, canvas);
+ctl.enableDamping = true; ctl.maxPolarAngle = Math.PI * 0.49; ctl.minDistance = 3; ctl.maxDistance = 60;
+scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+scene.add(new THREE.HemisphereLight(0xffffff, 0xd8d2c8, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+sun.position.set(7, 16, 9); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left:-10, right:10, top:10, bottom:-10, near:1, far:50 }); sun.shadow.bias = -0.0005;
+scene.add(sun);
+const cx = D.W * M / 2, cz = D.H * M / 2;
+const mats = {};
+const mat = c => mats[c] || (mats[c] = new THREE.MeshLambertMaterial({ color:c }));
+function box(g, w, h, d, x, y, z, color, cast = true, recv = true) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
+  m.position.set(x, y, z); m.castShadow = cast; m.receiveShadow = recv; g.add(m); return m;
+}
+function label(g, text, x, y, z, small) {
+  const lines = text.split('\n'), fs = 44, pad = 12;
+  const cv = document.createElement('canvas'), c2 = cv.getContext('2d');
+  const fnt = '700 ' + fs + 'px -apple-system,"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif';
+  c2.font = fnt;
+  const w = Math.max(...lines.map(t => c2.measureText(t).width)) + pad * 2, h = lines.length * fs * 1.15 + pad * 2;
+  cv.width = Math.ceil(w); cv.height = Math.ceil(h);
+  c2.font = fnt;
+  c2.fillStyle = 'rgba(255,255,255,.82)'; c2.fillRect(0, 0, cv.width, cv.height);
+  c2.fillStyle = '#1f2328'; c2.textAlign = 'center'; c2.textBaseline = 'middle';
+  lines.forEach((t, i) => c2.fillText(t, cv.width / 2, pad + fs * 1.15 * (i + .5)));
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, depthTest:false, transparent:true }));
+  const k = (small ? 0.0042 : 0.0058);
+  sp.scale.set(cv.width * k, cv.height * k, 1); sp.position.set(x, y, z); sp.renderOrder = 10; g.add(sp);
+}
+const levels = D.floors.map((fl, n) => {
+  const g = new THREE.Group(), wg = new THREE.Group(); g.add(wg); g.userData.wg = wg;
+  box(g, D.W * M + 1.6, 0.04, D.H * M + 1.6, 0, -0.09, 0, 0xdfe6dc, false);
+  for (const rm of fl.rooms) {
+    let a = 0;
+    for (const [x0, y0, x1, y1] of rm.rects) {
+      a += (x1 - x0) * (y1 - y0);
+      if (rm.kind !== '吹抜') box(g, (x1 - x0) * M, 0.06, (y1 - y0) * M, (x0 + x1) / 2 * M - cx, -0.03, (y0 + y1) / 2 * M - cz, COL[rm.kind] ?? 0xffffff, false);
+    }
+    const r = rm.rects.reduce((p, c) => (c[2] - c[0]) * (c[3] - c[1]) > (p[2] - p[0]) * (p[3] - p[1]) ? c : p);
+    const name = (rm.label || rm.name).replace('?', '').replace('(小)', '');
+    if (name === 'PS') continue;
+    const small = (r[2] - r[0]) < 1.6 || (r[3] - r[1]) < 1.1;
+    const txt = name + (['外', '階段'].includes(rm.kind) || name === '階段の吹抜け' ? '' : '\n' + (+(a / 2).toFixed(3)) + '帖');
+    label(g, txt, (r[0] + r[2]) / 2 * M - cx, small ? 1.0 : 0.8, (r[1] + r[3]) / 2 * M - cz, small);
+  }
+  for (const [p, t] of fl.walls) {
+    const th = t === 'ext' ? 0.15 : t === 'int' ? 0.10 : 0.05, h = t === 'rail' ? 1.1 : WH;
+    const hz = p[1] === p[3], len = (hz ? Math.abs(p[2] - p[0]) : Math.abs(p[3] - p[1])) * M + th;
+    const x = (p[0] + p[2]) / 2 * M - cx, z = (p[1] + p[3]) / 2 * M - cz;
+    box(wg, hz ? len : th, h, hz ? th : len, x, h / 2, z, 0xfaf8f3);
+    box(wg, hz ? len : th, 0.04, hz ? th : len, x, h + 0.02, z, 0x3a3f45, false, false);
+  }
+  for (const [lv, name, cid, x0, y0, x1, y1, h] of fl.furn) {
+    if (/^段|^踊り場|^ロフトの床/.test(name)) continue;
+    const hh = (cid === 'chair' ? 45 : h) / 100;
+    box(g, (x1 - x0) / 100, hh, (y1 - y0) / 100, (x0 + x1) / 200 - cx, hh / 2, (y0 + y1) / 200 - cz, FCOL[cid] ?? 0xdddddd);
+  }
+  if (n === 0) {  // 1階の階段：東の列を南へ8段 → 回り段5段 → 西の列を北へ2段（16蹴上）
+    const T = 0.2275, R = 0.1875, wood = 0xcdb89a;
+    for (let k = 0; k < 8; k++) box(g, 0.91 - 0.1, 0.04, T, 3.0 * M - cx, R * (k + 1) - 0.02, 4.0 * M + T * (k + .5) - cz, wood);
+    const W = [[2.5, 6, 3.5, 6.5], [3.0, 6.5, 3.5, 7], [2.0, 6.5, 3.0, 7], [1.5, 6.5, 2.0, 7], [1.5, 6, 2.5, 6.5]];
+    W.forEach(([a, b, c, d], k) => box(g, (c - a) * M - 0.04, 0.04, (d - b) * M - 0.04, (a + c) / 2 * M - cx, R * (9 + k) - 0.02, (b + d) / 2 * M - cz, wood));
+    for (let k = 0; k < 2; k++) box(g, 0.91 - 0.1, 0.04, T, 2.0 * M - cx, R * (14 + k) - 0.02, 6.0 * M - T * (k + .5) - cz, wood);
+  }
+  if (n === 1) {  // 2階：ハーフ吹抜けの上のロフト（東寄り 4.5帖、床が約1m高い）
+    box(g, 3 * M, 0.08, 3 * M, 9.0 * M - cx, 1.05, 5.5 * M - cz, 0xd9cdea);
+    label(g, 'ロフト 4.5帖（上）', 9.0 * M - cx, 1.6, 6.6 * M - cz, true);
+  }
+  scene.add(g); return g;
+});
+const state = { f:'1', v:'o', w:'l' };
+function apply(resetCam = true) {
+  const [g1, g2] = levels, f = state.f;
+  g1.visible = f !== '2'; g2.visible = f !== '1';
+  const off = D.H * M / 2 + 1.0;
+  g1.position.z = f === 'b' ? -off : 0; g2.position.z = f === 'b' ? off : 0;
+  levels.forEach(g => g.userData.wg.scale.y = state.w === 'l' ? 0.5 : 1);
+  document.querySelectorAll('#bar button[data-w]').forEach(b => b.classList.toggle('on', b.dataset.w === state.w));
+  document.querySelectorAll('#bar button[data-f]').forEach(b => b.classList.toggle('on', b.dataset.f === f));
+  document.querySelectorAll('#bar button[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === state.v));
+  if (!resetCam) return;
+  const need = f === 'b' ? Math.max(1, 0.62 / cam.aspect) * 2.0 : Math.max(1, 1.3 / cam.aspect);
+  const ty = 0.4;
+  ctl.target.set(0, ty, 0);
+  if (state.v === 't') cam.position.set(0, ty + 17 * need, 0.02);
+  else { const dist = 16.5 * need, sx = f === 'b' ? 0 : 0.22; cam.position.set(dist * sx, ty + dist * 0.86, dist * 0.46); }
+  ctl.update();
+}
+function resize() {
+  const w = wrap.clientWidth || 800, h = wrap.clientHeight || 600;
+  renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix();
+}
+document.querySelectorAll('#bar button[data-f]').forEach(b => b.onclick = () => { state.f = b.dataset.f; apply(); });
+document.querySelectorAll('#bar button[data-v]').forEach(b => b.onclick = () => { state.v = b.dataset.v; apply(); });
+document.querySelectorAll('#bar button[data-w]').forEach(b => b.onclick = () => { state.w = b.dataset.w; apply(false); });
+q('#t3').onclick = () => { q('#v3d').style.display = 'flex'; q('#v2d').style.display = 'none'; q('#t3').classList.add('on'); q('#t2').classList.remove('on'); resize(); };
+q('#t2').onclick = () => { q('#v3d').style.display = 'none'; q('#v2d').style.display = 'block'; q('#t2').classList.add('on'); q('#t3').classList.remove('on'); };
+window.addEventListener('resize', resize);
+resize(); apply();
+(function loop() { requestAnimationFrame(loop); ctl.update(); renderer.render(scene, cam); })();
+// 画像の書き出し（作成時の確認用）
+window.__shot = (f, v, w = 1600, h = 1200, wl = 'l') => {
+  state.f = f; state.v = v; state.w = wl; renderer.setPixelRatio(1); renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix();
+  apply(); renderer.render(scene, cam); return canvas.toDataURL('image/jpeg', 0.92);
+};
+</script>
+</body>
+</html>
