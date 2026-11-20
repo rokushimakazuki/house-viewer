@@ -90,6 +90,28 @@ const louverTex = () => woodCanvas('louver', (g, img) => {
   // 壁では絵の縦横が入れ替わるので、絵の上では横向きの帯 → 壁で縦の板 … のはずが逆だったため、縦の帯で描く
   for (let x = 0; x < 1024; x += 40) { const sy = r() * (1024 - 40); g.save(); g.translate(x + 31, 0); g.rotate(Math.PI / 2); g.drawImage(img, 0, sy, 1024, 30, 0, 0, 1024, 31); g.restore(); }
 });
+// 縁なし半畳（琉球畳風・和紙畳）：い草の目が半畳ごとに縦・横と入れ替わる（市松）。光の当たり方で2色に見える
+const ryukyuTex = (col) => canvasTex('ryukyu' + col, 1024, 1024, (g) => {
+  const r = rnd(29), S = 512;
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+    const x0 = i * S, y0 = j * S, horiz = (i + j) % 2 === 0, tone = horiz ? 12 : -12;
+    g.fillStyle = rgb(col, tone); g.fillRect(x0, y0, S, S);
+    // い草の目（細い線を 4px おき）
+    for (let k = 0; k < S; k += 4) {
+      g.fillStyle = rgb(col, tone + (r() - 0.5) * 22 - 12, 0.7);
+      if (horiz) g.fillRect(x0, y0 + k, S, 1.6); else g.fillRect(x0 + k, y0, 1.6, S);
+    }
+    // 経糸（目と直角に、うっすら）
+    for (let k = 20; k < S; k += 44) {
+      g.fillStyle = rgb(col, tone - 16, 0.25);
+      if (horiz) g.fillRect(x0 + k, y0, 2, S); else g.fillRect(x0, y0 + k, S, 2);
+    }
+    // 縁（へり）のない角の丸み：ふちを少し暗く
+    const gr = g.createLinearGradient(0, 0, 0, 1);
+    g.strokeStyle = rgb(col, -45, 0.9); g.lineWidth = 3; g.strokeRect(x0 + 1.5, y0 + 1.5, S - 3, S - 3);
+    g.strokeStyle = rgb(col, -20, 0.5); g.lineWidth = 6; g.strokeRect(x0 + 5, y0 + 5, S - 10, S - 10);
+  }
+});
 // クロス（壁紙）：色はほぼ一様、ごく細かい粒だけ（1枚の絵＝1m 角）
 const clothTex = (col) => canvasTex('cl' + col, 512, 512, (g, W, H) => {
   const r = rnd(9);
@@ -184,11 +206,11 @@ export const PATTERNS = {
     steel: 0x18191a, baseboard: 0x2e2f31, siding: 0xe6e3dd, roof: 0x2b2c2e, soffit: 0x5a3b26 },
   p5: { name: '⑤ ホテルライク（グレー×石）', note: '大判のグレーのタイル、グレーのクロス、テレビの壁は石目（エコカラット調）、下り天井はチャコール、キッチンはグレージュの扉にグレーのセラミックの天板',
     floor: ['tile', 0x6f6c69], wall: ['cloth', 0xc9c6c1], ceiling: ['cloth', 0xd6d3ce], accent: ['stone', 0x8d8a86], woodceil: ['cloth', 0x4a4a4b], tread: ['plain', 0x3d3e40, 0.6], oriage: ['cloth', 0x8f8c88], riser: ['plain', 0x3d3e40, 0.6],
-    kitchen: ['plain', 0xbdb6aa, 0.5], counter: ['plain', 0x5a5b5d, 0.55], door: ['plain', 0xbdb6aa, 0.5], table: ['plain', 0x2b2b2b, 0.5], chair_wood: ['plain', 0x222222, 0.6], chair_seat: ['plain', 0x8d8a85, 1], sofa: ['plain', 0x9d978d, 1], rug: ['tint', 0xffffff, 1.6], tatami: ['tint', 0xb4b4ae],
+    kitchen: ['plain', 0xbdb6aa, 0.5], counter: ['plain', 0x5a5b5d, 0.55], door: ['plain', 0xbdb6aa, 0.5], table: ['plain', 0x2b2b2b, 0.5], chair_wood: ['plain', 0x222222, 0.6], chair_seat: ['plain', 0x8d8a85, 1], sofa: ['plain', 0x9d978d, 1], rug: ['tint', 0xffffff, 1.6], tatami: ['ryukyu', 0xbab6a8],
     frame: 0x262728, steel: 0x1c1d1e, baseboard: 0x8f8c88, siding: 0x5d5f62, roof: 0x2b2c2e, soffit: 0x3a3b3c },
   p6: { name: '⑥ ジャパンディ（生成り×白木）', note: '生成りの壁、白木のオークの床、テレビの壁は木のルーバー、木の下り天井、キッチンは明るい木目。黒は窓の枠などに少しだけ',
     floor: ['wood', OAK, 0xb48a62, 0.9], wall: ['cloth', 0xe2dccf], ceiling: ['cloth', 0xe8e3d8], accent: ['louver', 0xa77d55], woodceil: ['wood', OAK, 0xb08458, 1.0], tread: ['wood', OAK, 0xa87a4d, 1.0], oriage: ['cloth', 0xe2d8c3], riser: ['wood', OAK, 0xa87a4d, 1.0],
-    kitchen: ['wood', OAK, 0xb08a60, 1.0], counter: ['plain', 0xe8e4dc, 0.35], door: ['wood', OAK, 0xb08a60, 1.0], table: ['wood', OAK, 0x9a7350, 1.0], chair_wood: ['plain', 0xa57a52, 0.7], chair_seat: ['plain', 0xc9bda6, 1], sofa: ['plain', 0xc2b8a3, 1], rug: ['tint', 0xffe2b8, 2.0], tatami: ['tint', 0xffffff],
+    kitchen: ['wood', OAK, 0xb08a60, 1.0], counter: ['plain', 0xe8e4dc, 0.35], door: ['wood', OAK, 0xb08a60, 1.0], table: ['wood', OAK, 0x9a7350, 1.0], chair_wood: ['plain', 0xa57a52, 0.7], chair_seat: ['plain', 0xc9bda6, 1], sofa: ['plain', 0xc2b8a3, 1], rug: ['tint', 0xffe2b8, 2.0], tatami: ['ryukyu', 0xc2aa7c],
     frame: 0x262728, steel: 0x1c1d1e, baseboard: 0xb08a60, siding: 0xcfc9bd, roof: 0x2b2c2e, soffit: 0xa87a4d },
   p7: { name: '⑦ 北欧ナチュラル（白×明るい木×ネイビー）', note: '白い壁、明るい木の床と板張りの天井、テレビの壁はネイビー、キッチンは白に木のカウンター',
     floor: ['wood', OAK, 0xbf9a72, 0.9], wall: ['cloth', 0xe4e3df], ceiling: ['wood', OAK, 0xc8a47a, 0.9], accent: ['cloth', 0x3d4f63], woodceil: ['wood', OAK, 0xc49a6c, 0.9], tread: ['wood', OAK, 0xc49a6c, 0.9], oriage: ['wood', OAK, 0xc8a47a, 0.9], riser: ['wood', OAK, 0xc49a6c, 0.9],
@@ -196,15 +218,15 @@ export const PATTERNS = {
     frame: 0xe6e3dd, steel: 0x2a2b2c, baseboard: 0xe4e3df, siding: 0xe6e3dd, roof: 0x2f3033, soffit: 0xb3875a },
   p8: { name: '⑧ インダストリアル（モルタル×黒×古木）', note: 'モルタル調の床、コンクリート調の天井とテレビの壁、濃い古木の下り天井、黒のキッチンにステンレスの天板、キャメルの革風ソファ',
     floor: ['concrete', 0x63625f, 1.2], wall: ['cloth', 0xbab7b1], ceiling: ['concrete', 0x9c9a96, 1.0], accent: ['concrete', 0x58595b, 1.3], woodceil: ['wood', OAK, 0x4e3423, 1.2], tread: ['plain', 0x1e1e1e, 0.6], oriage: ['concrete', 0x8a8986, 1.0], riser: ['plain', 0x1e1e1e, 0.6],
-    kitchen: ['plain', 0x232425, 0.5], counter: ['metal', 0xb5b8bb], door: ['plain', 0x2a2b2d, 0.5], table: ['wood', OAK, 0x5c3c2a, 1.1], chair_wood: ['plain', 0x1e1e1e, 0.6], chair_seat: ['plain', 0x8a6a4c, 1], sofa: ['plain', 0x8a5e3e, 1], rug: ['tint', 0x9a948c], tatami: ['tint', 0xb4b4ae],
+    kitchen: ['plain', 0x232425, 0.5], counter: ['metal', 0xb5b8bb], door: ['plain', 0x2a2b2d, 0.5], table: ['wood', OAK, 0x5c3c2a, 1.1], chair_wood: ['plain', 0x1e1e1e, 0.6], chair_seat: ['plain', 0x8a6a4c, 1], sofa: ['plain', 0x8a5e3e, 1], rug: ['tint', 0x9a948c], tatami: ['ryukyu', 0x57544f],
     frame: 0x1e1f21, steel: 0x141516, baseboard: 0x2a2b2d, siding: 0x2a2c2e, roof: 0x1e1f21, soffit: 0x4e3423 },
   p9: { name: '⑨ ウォールナット×黒大理石', note: 'ウォールナットのヘリンボーン張りの床、テレビの壁はウォールナットのルーバー、ウォールナットのキッチンに黒の大理石の天板。重厚で落ち着いた感じ',
     floor: ['herring', 0x5c3c2a], wall: ['cloth', 0xc9c3b9], ceiling: ['cloth', 0xd9d4cb], accent: ['louver', 0x5c3c2a], woodceil: ['wood', OAK, 0x5c3c2a, 1.1], tread: ['wood', OAK, 0x4e3423, 1.1], oriage: ['wood', OAK, 0x5c3c2a, 1.1], riser: ['wood', OAK, 0x4e3423, 1.1],
-    kitchen: ['wood', OAK, 0x4e3423, 1.1], counter: ['marble'], door: ['wood', OAK, 0x5c3c2a, 1.1], table: ['wood', OAK, 0x5c3c2a, 1.1], chair_wood: ['plain', 0x3b2a1e, 0.7], chair_seat: ['plain', 0x2a2a2a, 1], sofa: ['plain', 0x4d4c4a, 1], rug: ['tint', 0x8a8a8a], tatami: ['tint', 0xb4b4ae],
+    kitchen: ['wood', OAK, 0x4e3423, 1.1], counter: ['marble'], door: ['wood', OAK, 0x5c3c2a, 1.1], table: ['wood', OAK, 0x5c3c2a, 1.1], chair_wood: ['plain', 0x3b2a1e, 0.7], chair_seat: ['plain', 0x2a2a2a, 1], sofa: ['plain', 0x4d4c4a, 1], rug: ['tint', 0x8a8a8a], tatami: ['ryukyu', 0x8c6c4c],
     frame: 0x1e1f21, steel: 0x18191a, baseboard: 0x3b2a1e, siding: 0x2a2c2e, roof: 0x1e1f21, soffit: 0x5c3c2a },
   p10: { name: '⑩ 白×アイボリー（韓国風）', note: '白とアイボリーでまとめ、床は淡い木、キッチンは白に白の大理石の天板、ソファとラグはアイボリー',
     floor: ['wood', OAK, 0xc7ad8c, 0.8], wall: ['cloth', 0xece8df], ceiling: ['cloth', 0xf0ede6], accent: ['cloth', 0xe2d9c8], woodceil: ['plain', 0xece8df, 0.7], tread: ['plain', 0xe8e3d8, 0.6], oriage: ['cloth', 0xece8df], riser: ['plain', 0xe8e3d8, 0.6],
-    kitchen: ['plain', 0xf0eee9, 0.4], counter: ['marble', 0xe9e7e2, 0xb9b9b5], door: ['plain', 0xf0eee9, 0.5], table: ['plain', 0xf0eee9, 0.4], chair_wood: ['plain', 0xd8c7ad, 0.7], chair_seat: ['plain', 0xece4d4, 1], sofa: ['plain', 0xe6dfd2, 1], rug: ['tint', 0xfff4e2, 2.6], tatami: ['tint', 0xffffff],
+    kitchen: ['plain', 0xf0eee9, 0.4], counter: ['marble', 0xe9e7e2, 0xb9b9b5], door: ['plain', 0xf0eee9, 0.5], table: ['plain', 0xf0eee9, 0.4], chair_wood: ['plain', 0xd8c7ad, 0.7], chair_seat: ['plain', 0xece4d4, 1], sofa: ['plain', 0xe6dfd2, 1], rug: ['tint', 0xfff4e2, 2.6], tatami: ['ryukyu', 0xbab6a8],
     frame: 0xe6e3dd, steel: 0x2a2b2c, baseboard: 0xece8df, siding: 0xe6e3dd, roof: 0x2f3033, soffit: 0xe8e3d8 },
 };
 // 材料ごとの、絵1枚の大きさの調整（GLB の UV は floor＝1.2m、wall・ceiling＝1m、accent・woodceil＝0.6m 単位）
@@ -213,11 +235,11 @@ const REP = { floor: 0.6, accent: 0.3, woodceil: 0.3, oriage: 0.5, wall: 1, ceil
 
 function remember(m) {
   if (m.userData.orig) return;
-  m.userData.orig = { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, color: m.color.getHex(), roughness: m.roughness, metalness: m.metalness };
+  m.userData.orig = { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, bumpMap: m.bumpMap, bumpScale: m.bumpScale, color: m.color.getHex(), roughness: m.roughness, metalness: m.metalness };
 }
 function restore(m) {
   const o = m.userData.orig; if (!o) return;
-  m.map = o.map; m.normalMap = o.normalMap; m.roughnessMap = o.roughnessMap; m.color.setHex(o.color); m.roughness = o.roughness; m.metalness = o.metalness; m.needsUpdate = true;
+  m.map = o.map; m.normalMap = o.normalMap; m.roughnessMap = o.roughnessMap; m.bumpMap = o.bumpMap; m.bumpScale = o.bumpScale; m.color.setHex(o.color); m.roughness = o.roughness; m.metalness = o.metalness; m.needsUpdate = true;
 }
 function plain(m, col, rough = 0.6, metal = 0) { m.map = null; m.normalMap = null; m.roughnessMap = null; m.color.setHex(col); m.roughness = rough; m.metalness = metal; m.needsUpdate = true; }
 function surface(m, spec, name) {
@@ -263,7 +285,9 @@ export const CHOICES = {
   tread: { label: '格子・階段・和室の扉', opts: WOODS },
   riser: { label: '小上がりの側面', opts: WOODS },
   oriage: { label: '和室の天井', opts: [['白木', ['wood', OAK, W_LIGHT, 0.9]], ['ナチュラル', ['wood', OAK, W_NAT, 1.0]], ['濃い木', ['wood', OAK, 0x6a4a34, 1.0]], ['グレー', ['cloth', 0x9e9c98]], ['白', ['cloth', 0xdedcd8]], ['黒', ['cloth', 0x2c2c2d]], ['和紙調（生成り）', ['cloth', 0xe2d8c3]]] },
-  tatami: { label: '畳', opts: [['緑', ['tint', 0xffffff]], ['グレー（和紙畳）', ['tint', 0xb4b4ae]], ['黄金色', ['tint', 0xf2dc9a]], ['生成り', ['tint', 0xf0e4c8]], ['墨色', ['tint', 0x5c5c58]], ['うぐいす', ['tint', 0xc8d0a0]]] },
+  tatami: { label: '畳', opts: [['縁あり・緑', ['tint', 0xffffff]], ['縁あり・グレー', ['tint', 0xb4b4ae]], ['縁あり・黄金色', ['tint', 0xf2dc9a]],
+    ['縁なし市松・白茶（ベージュ）', ['ryukyu', 0xc2aa7c]], ['縁なし市松・銀白', ['ryukyu', 0xbab6a8]], ['縁なし市松・黄金', ['ryukyu', 0xc8a862]], ['縁なし市松・若草', ['ryukyu', 0xa0a56e]],
+    ['縁なし市松・灰桜', ['ryukyu', 0xb09a90]], ['縁なし市松・胡桃（茶）', ['ryukyu', 0x8c6c4c]], ['縁なし市松・墨', ['ryukyu', 0x57544f]], ['縁なし市松・藍', ['ryukyu', 0x5b6579]]] },
   kitchen: { label: 'キッチンの扉', opts: [['白', ['plain', 0xe8e6e1, 0.4]], ['グレージュ', ['plain', 0xbdb6aa, 0.5]], ['ライトグレー', ['plain', 0xb4b5b5, 0.5]], ['チャコール', ['plain', 0x4a4b4d, 0.5]], ['黒', ['plain', 0x1e1f21, 0.5]],
     ['コンクリート調', ['concrete', 0x6c6f72, 1.3]], ['明るい木目', ['wood', OAK, W_NAT, 1.0]], ['ウォールナット木目', ['wood', OAK, W_WAL, 1.1]], ['くすみグリーン', ['plain', 0x7f8a76, 0.5]], ['ネイビー', ['plain', 0x2f3e52, 0.5]]] },
   counter: { label: 'キッチンの天板', opts: [['黒の大理石', ['marble']], ['白の大理石', ['marble', 0xe6e4df, 0x9d9d99]], ['グレーの大理石', ['marble', 0x8d8c89, 0xe0dfda]], ['グレーのセラミック（マット）', ['plain', 0x5a5b5d, 0.55]],
@@ -286,6 +310,10 @@ function applySpec(m, v, n) {
   else if (k === 'tint') { m.color.setHex(v[1]).multiplyScalar(v[2] ?? 1); m.needsUpdate = true; }   // v[2]＞1 で明るくもできる（グレーの模様をベージュ等にする）
   else if (k === 'marble') { m.map = marbleTex(v[1], v[2]); m.normalMap = null; m.roughnessMap = null; m.color.setHex(0xffffff); m.roughness = 0.22; m.metalness = 0; m.needsUpdate = true; }
   else if (k === 'metal') plain(m, v[1], 0.32, 0.85);
+  else if (k === 'ryukyu') {
+    const t = ryukyuTex(v[1]); t.offset.set(0.875, 0.25);   // 和室の端（x318.5, y364）に半畳の目地をそろえる
+    m.map = t; m.bumpMap = t; m.bumpScale = 1.5; m.normalMap = null; m.roughnessMap = null; m.color.setHex(0xffffff); m.roughness = 0.9; m.metalness = 0; m.needsUpdate = true;
+  }
   else if (k === 'herring') { m.map = herringTex(); m.normalMap = null; m.roughnessMap = null; m.metalness = 0; tint(m, 'oak_wood_planks', v[1]); m.roughness = 0.7; m.needsUpdate = true; }
   else if (k === 'louver') { m.map = louverTex(); m.map.repeat.set(REP[n] ?? 1, REP[n] ?? 1); m.normalMap = null; m.roughnessMap = null; m.metalness = 0; tint(m, 'oak_wood_planks', v[1]); m.roughness = 0.85; m.needsUpdate = true; }
   else if (k === 'siding') { m.map = sidingTex(v[1]); m.normalMap = null; m.color.setHex(0xffffff); m.roughness = 0.8; m.needsUpdate = true; }
@@ -477,6 +505,7 @@ function swatchOf(v, n) {
   const k = v[0];
   if (k === 'tint') { const c = new THREE.Color(TINT_BASE[n] ?? 0x888888).multiply(new THREE.Color(v[1])).multiplyScalar(v[2] ?? 1); return c.getHex(); }
   if (k === 'wood') return v[2];
+  if (k === 'ryukyu') return v[1];
   if (k === 'marble') return v[1] ?? 0x2e2f31;
   return v[1];
 }
