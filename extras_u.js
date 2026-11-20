@@ -242,7 +242,7 @@ export function initExtras(ctx) {
   const C1 = FL1 + 2.40 - 0.01, CV = FL1 + 5.40 - 0.01, C2 = FL1 + 5.40 - 0.01;
   const LIGHTS = [
     // [x, y, z, cd]
-    [0.223, FL1 + 1.75, -1.975, 220], [2.522, C1, -1.995, 160], [2.522, C1, -3.495, 140], [-0.777, C1, -3.495, 140], [-1.978, C1, -1.095, 120],   // LDK
+    [0.223, FL1 + 1.75, -1.975, 220], [2.522, C1 - 0.20, -1.995, 160], [2.522, C1 - 0.20, -3.495, 140], [-0.777, C1, -3.495, 140], [-1.978, C1, -1.095, 120],   // LDK
     [2.223, FL1 + 3.89, 0.905, 380], [3.822, FL1 + 3.89, 0.905, 380],                                         // リビング（ハーフ吹抜けの天井）
     [-0.228, C1 + 0.15, 0.905, 150],                                                                                  // 和室（折り上げ）
     [-2.478, C2, 0.905, 220],                                                                                          // 階段の吹抜け
@@ -254,7 +254,7 @@ export function initExtras(ctx) {
     const l = new THREE.PointLight(0xffe2bd, cd * LIGHT_K, 0, 2); l.position.set(x, y - 0.06, z); lights.add(l);
     const f = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.012, 16), fixtureM); f.position.set(x, y + 0.004, z); fixtures.add(f);
     if (false) voidLights.push([l, f]);   // 2階の照明（x<0）は動かさない
-    if (y < C1 - 0.1) { const cord = boxAt(new THREE.MeshStandardMaterial({ color: 0x222222 }), x - 0.004, x + 0.004, y, C1, z - 0.004, z + 0.004); fixtures.add(cord); const sh = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.18, 24, 1, true), new THREE.MeshStandardMaterial({ color: 0x2a2a2a, side: THREE.DoubleSide })); sh.position.set(x, y + 0.04, z); fixtures.add(sh); }
+    if (y < C1 - 0.3) { const cord = boxAt(new THREE.MeshStandardMaterial({ color: 0x222222 }), x - 0.004, x + 0.004, y, C1, z - 0.004, z + 0.004); fixtures.add(cord); const sh = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.18, 24, 1, true), new THREE.MeshStandardMaterial({ color: 0x2a2a2a, side: THREE.DoubleSide })); sh.position.set(x, y + 0.04, z); fixtures.add(sh); }
   }
   const street = new THREE.PointLight(0xfff0d8, 70, 0, 2); street.position.set(ROAD.WW + 1.25, 4.9, 0.6); lights.add(street);
 

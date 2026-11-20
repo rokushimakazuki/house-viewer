@@ -49,9 +49,58 @@ function chair() {
   g.add(at(box(M.wood, W - 2 * T, 0.04, 0.02), 0, 0.56, -D / 2 + T / 2));   // 背の下の横木
   return g;
 }
+// ---- キッチンの細かい所（シンク・水栓・IH・レンジフード・ガラスのガード・扉の目地）----
+// 本体の箱（色はパターンで変わる）は家のモデルにあり、ここでは上に載せる物だけ作る。
+// キッチン本体：x 595〜865・y 161〜262（作業する人は北側 y<161）。カップボード：x 603〜856・y 8〜60（前は南 y=60）
+const K = {
+  steel: new THREE.MeshStandardMaterial({ color: 0xb9bcbf, roughness: 0.35, metalness: 0.8 }),
+  basin: new THREE.MeshStandardMaterial({ color: 0x8e9194, roughness: 0.45, metalness: 0.7 }),
+  ih: new THREE.MeshStandardMaterial({ color: 0x0d0d0f, roughness: 0.12, metalness: 0.1 }),
+  ring: new THREE.MeshStandardMaterial({ color: 0x5a5d61, roughness: 0.4, emissive: 0x3a0a05, emissiveIntensity: 0.6 }),
+  glass: new THREE.MeshStandardMaterial({ color: 0xdfe8ea, roughness: 0.05, transparent: true, opacity: 0.22 }),
+  hood: new THREE.MeshStandardMaterial({ color: 0xd2d3d4, roughness: 0.6, metalness: 0.05 }),
+  groove: new THREE.MeshStandardMaterial({ color: 0x1b1b1c, roughness: 0.8 }),
+};
+// 平面図の cm と高さ m で箱を置く
+function kbox(g, mat, x0, y0, x1, y1, h0, h1, FL1) {
+  const m = box(mat, (x1 - x0) / 100, h1 - h0, (y1 - y0) / 100);
+  m.position.set(PX((x0 + x1) / 2), FL1 + (h0 + h1) / 2, PZ((y0 + y1) / 2)); g.add(m); return m;
+}
+export function addKitchenDetails(furn, FL1) {
+  const g = new THREE.Group(); g.name = 'kitchenDetails';
+  const T = 0.90;   // 天板の上面
+  // シンク（幅80cm）：縁のステンレスと、一段暗い槽
+  kbox(g, K.steel, 636, 172, 724, 228, T, T + 0.003, FL1);
+  kbox(g, K.basin, 642, 177, 718, 223, T + 0.003, T + 0.004, FL1);
+  // 水栓（シンクの奥＝南側の縁）
+  const tap = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.018, 0.30, 16), K.steel);
+  tap.position.set(PX(680), FL1 + T + 0.15, PZ(236)); g.add(tap);
+  const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.20, 12), K.steel);
+  spout.rotation.x = Math.PI / 2; spout.position.set(PX(680), FL1 + T + 0.29, PZ(226)); g.add(spout);
+  // IH（3口のうち2口を表示）：黒いガラスと輪
+  kbox(g, K.ih, 768, 176, 846, 234, T, T + 0.006, FL1);
+  for (const [cx, cy, r] of [[788, 202, 0.085], [826, 202, 0.085], [807, 224, 0.06]]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.004, 6, 40), K.ring);
+    ring.rotation.x = Math.PI / 2; ring.position.set(PX(cx), FL1 + T + 0.008, PZ(cy)); g.add(ring);
+  }
+  // IH の奥（南）のガラスのオイルガード
+  kbox(g, K.glass, 760, 257, 865, 258.2, T, T + 0.30, FL1);
+  // レンジフード（薄型）と、下り天井（2.20m）までのダクトカバー
+  kbox(g, K.hood, 768, 176, 848, 236, 1.62, 1.70, FL1);
+  kbox(g, K.hood, 790, 190, 826, 222, 1.70, 2.20, FL1);
+  // キッチン本体の作業側（北面 y=161）の扉の目地：縦に4本、引き出しの横目地
+  for (const x of [662, 730, 798]) kbox(g, K.groove, x - 0.3, 160.4, x + 0.3, 161, 0.1, 0.85, FL1);
+  for (const h of [0.30, 0.58]) kbox(g, K.groove, 597, 160.4, 863, 161, h - 0.003, h + 0.003, FL1);
+  // カップボード（南面 y=60）：下の扉と引き出しの目地、吊戸棚（前面 y=43）の扉の目地
+  for (let x = 653; x < 856; x += 50.6) kbox(g, K.groove, x - 0.3, 60, x + 0.3, 60.6, 0.1, 0.83, FL1);
+  for (const h of [0.36, 0.60]) kbox(g, K.groove, 605, 60, 854, 60.6, h - 0.003, h + 0.003, FL1);
+  for (let x = 653; x < 856; x += 50.6) kbox(g, K.groove, x - 0.3, 43, x + 0.3, 43.6, 1.52, 2.18, FL1);
+  furn.add(g);
+}
 export function addSimpleFurniture(furn, FL1) {
   const put = (o, x, y, a) => { o.position.set(PX(x), FL1, PZ(y)); o.rotation.y = -a; furn.add(o); };
   // ソファは東（テレビ）を向く。以前のモデルと同じ位置（中心 x=684, y=515）
   put(sofa(), 684, 515, -Math.PI / 2);
   for (const x of [447.5, 502.5, 557.5]) { put(chair(), x, 153, 0); put(chair(), x, 272, Math.PI); }
+  addKitchenDetails(furn, FL1);
 }
