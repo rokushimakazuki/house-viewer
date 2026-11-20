@@ -94,6 +94,10 @@
     <button data-h="24">2.4m</button>
   </div>
 
+  <div class="lbl">内装・外装の雰囲気（色と素材の目安）</div>
+  <div class="row" id="designs" style="flex-wrap:wrap"></div>
+  <p class="sub" id="designnote" style="margin:4px 0 0"></p>
+
   <div class="lbl">はじめの立ち位置</div>
   <div class="row" id="starts">
     <button data-s="out" class="on">家の外（南）</button>
@@ -177,6 +181,7 @@
   <div class="row">
     <span class="grp" id="grpv"><span>高窓の高さ</span><button data-v="A" class="on">A 低め</button><button data-v="B">B 高め</button></span>
     <span class="grp"><span>リビングの窓</span><button data-h="20">2.0m</button><button data-h="22" class="on">2.2m</button><button data-h="24">2.4m</button></span>
+    <span class="grp"><span>雰囲気</span><select id="designsel" style="font-size:14px;padding:6px"></select></span>
   </div>
   <div class="row">
     <button id="pose">座る</button>
@@ -1017,5 +1022,6 @@ window._dbg = { renderer, drawHud, hudCanvas, postureOf, ext, makeSheet, vpCamer
 let hudTimer = 0;
 function drawHudThrottled() { const n = performance.now(); if (n - hudTimer > 150) { hudTimer = n; drawHud(); } }
 </script>
+<script type="module" src="design_u.js"></script>
 </body>
 </html>
