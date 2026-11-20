@@ -429,6 +429,19 @@ function triInfo(geo) {
   }
   return (geo.userData.tri = { plane, verts, ver });
 }
+// 部屋の範囲（モデルの座標＝(平面cm − 中心)/100、高さは 1階FL＋0.59）
+const L = (x) => (x - 477.75) / 100, LZ = (y) => (y - 409.5) / 100;
+const WASHITSU_E = L(591.5);
+const ROOMS = { washitsu: { label: '和室', x0: L(318.5), x1: L(591.5), z0: LZ(364), z1: LZ(637), y1: 3.0 } };
+function centroid(pos, [i0, i1, i2]) { return _a.fromBufferAttribute(pos, i0).add(_b.fromBufferAttribute(pos, i1)).add(_c.fromBufferAttribute(pos, i2)).divideScalar(3).clone(); }
+function inRoom(p, r, m = 0.02) { return p.x > r.x0 + m && p.x < r.x1 - m && p.z > r.z0 + m && p.z < r.z1 - m && p.y < r.y1; }
+function roomOf(p) { for (const k in ROOMS) if (inRoom(p, ROOMS[k], 0)) return k; return null; }   // タップした点がどの部屋の壁か（部屋の中を向いた面は部屋の線より内側にある）
+// 部屋の中を向いた壁の面（三角形の重心が部屋の内側の少し手前にある）をまとめる
+function roomRegion(geo, rk) {
+  const r = ROOMS[rk], { verts } = triInfo(geo), pos = geo.attributes.position, set = new Set();
+  for (let t = 0; t < verts.length; t++) { if (!verts[t]) continue; if (inRoom(centroid(pos, verts[t][3]), r)) set.add(t); }
+  return set.size ? set : null;
+}
 // 種の点を含む三角形から、同じ平面でつながっている三角形を集める
 function region(geo, planeKey, seed) {
   const { plane, verts } = triInfo(geo), pos = geo.attributes.position;
@@ -441,15 +454,21 @@ function region(geo, planeKey, seed) {
     const dd = _a.distanceToSquared(seed); if (dd < best) { best = dd; start = t; }
   }
   const byV = new Map(); for (const t of cand) for (const k of verts[t].slice(0, 3)) { if (!byV.has(k)) byV.set(k, []); byV.get(k).push(t); }
-  const seen = new Set([start]), q = [start];
-  while (q.length) { const t = q.pop(); for (const k of verts[t].slice(0, 3)) for (const u of byV.get(k)) if (!seen.has(u)) { seen.add(u); q.push(u); } }
+  const ew = planeKey.startsWith('0.00,0.00,1.00');   // 東西に走る壁（南の壁など）だけ、和室との境で分ける
+  const zone = (t) => { if (!ew) return 'o'; const c = centroid(pos, verts[t][3]); return c.z > 2.0 && c.x < WASHITSU_E ? 'w' : 'o'; };
+  const z0 = zone(start), seen = new Set([start]), q = [start];
+  while (q.length) { const t = q.pop(); for (const k of verts[t].slice(0, 3)) for (const u of byV.get(k)) if (!seen.has(u) && zone(u) === z0) { seen.add(u); q.push(u); } }
   return seen;
 }
 // 面を切り出して、元の部品の子にする
 function splitPart(mesh, key) {
-  const [, pn, pd, sx, sy, sz] = key.split('|'), planeKey = pn + '|' + pd;   // 平面のキー自体に | が入っている
-  const seed = new THREE.Vector3(+sx / 100, +sy / 100, +sz / 100);
-  const geo = mesh.geometry, set = region(geo, planeKey, seed); if (!set) return null;
+  const geo = mesh.geometry; let set;
+  if (key.split('|')[1] === 'ROOM') set = roomRegion(geo, key.split('|')[2]);   // wall|ROOM|washitsu
+  else {
+    const [, pn, pd, sx, sy, sz] = key.split('|'), planeKey = pn + '|' + pd;   // 平面のキー自体に | が入っている
+    set = region(geo, planeKey, new THREE.Vector3(+sx / 100, +sy / 100, +sz / 100));
+  }
+  if (!set) return null;
   const { verts } = triInfo(geo), keep = [], take = [];
   for (let t = 0; t < verts.length; t++) { if (!verts[t]) continue; (set.has(t) ? take : keep).push(...verts[t][3]); }
   geo.setIndex(keep); geo.userData.tri = null;
@@ -466,7 +485,8 @@ function applyParts(d) {
   const bases = [];
   d.rig.traverse((o) => { if (o.isMesh && !o.userData.partKey && PART_MATS.includes(o.material.name)) bases.push(o); });
   for (const mesh of bases) {
-    for (const key in PARTS) {
+    const keys = Object.keys(PARTS).sort((a, b) => (a.includes('|ROOM|') ? 1 : 0) - (b.includes('|ROOM|') ? 1 : 0));
+    for (const key of keys) {
       if (!key.startsWith(mesh.material.name + '|')) continue;
       const part = (mesh.userData.parts && mesh.userData.parts[key]) || splitPart(mesh, key); if (!part) continue;
       const i = PARTS[key], c = CHOICES[mesh.material.name];
@@ -483,6 +503,11 @@ export function setPart(key, i) {
   if (i == null) delete PARTS[key]; else PARTS[key] = i;
   try { localStorage.setItem('design_u_parts', JSON.stringify(PARTS)); } catch (e) { /* 保存できなくても切り替えはできる */ }
   applyAll();
+}
+function roomKeyOf(hit) {
+  const o = hit.object; if (!PART_MATS.includes((o.userData.base || o).material.name)) return null;
+  const rk = roomOf((o.userData.base || o).worldToLocal(hit.point.clone()));
+  return rk ? `${(o.userData.base || o).material.name}|ROOM|${rk}` : null;
 }
 function partKeyOf(hit) {
   const o = hit.object; if (o.userData.partKey) return o.userData.partKey;
@@ -510,7 +535,7 @@ function swatchOf(v, n) {
   return v[1];
 }
 function chip(col) { return `<span style="display:inline-block;width:14px;height:14px;border-radius:4px;margin-right:6px;vertical-align:-2px;border:1px solid rgba(255,255,255,.35);background:${hex(col ?? 0x888888)}"></span>`; }
-function openPop(n, pkeyHit) {
+function openPop(n, pkeyHit, rkeyHit) {
   const c = CHOICES[n]; pop.innerHTML = '';
   const h = document.createElement('div'); h.style.cssText = 'font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between;gap:12px;align-items:center';
   h.textContent = c.label + ' を変える';
@@ -518,11 +543,20 @@ function openPop(n, pkeyHit) {
   pop.append(h);
   const row = document.createElement('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px';
   const btn = (label, on, f, col) => { const b = document.createElement('button'); b.innerHTML = (col != null ? chip(col) : '') + label; b.style.cssText = `padding:8px 12px;border-radius:10px;border:1px solid ${on ? '#e8792f' : '#555'};background:${on ? '#3a2a1f' : '#2c2f33'};color:${on ? '#ffb27a' : '#fff'};font-size:15px`; b.onclick = f; row.append(b); };
-  if (pkeyHit) {   // 壁：この面だけ
-    const cap = document.createElement('div'); cap.textContent = 'この面だけ'; cap.style.cssText = 'font-size:13px;color:#bbb;margin:2px 0 4px'; pop.append(cap);
-    pop.append(row);
-    c.opts.forEach(([label, v], i) => btn(label, PARTS[pkeyHit] === i, () => { setPart(pkeyHit, i); openPop(n, pkeyHit); }, swatchOf(v, n)));
-    btn('元に戻す', PARTS[pkeyHit] == null, () => { setPart(pkeyHit, null); openPop(n, pkeyHit); });
+  if (pkeyHit) {   // 壁：この面だけ（部屋まるごとで切り出した面なら、この段は出さない）
+    const again = () => openPop(n, pkeyHit, rkeyHit);
+    const mkRow = (title) => { const cap = document.createElement('div'); cap.textContent = title; cap.style.cssText = 'font-size:13px;color:#bbb;margin:8px 0 4px'; pop.append(cap); const rw = document.createElement('div'); rw.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px'; pop.append(rw); return rw; };
+    const btnIn = (rw, label, on, f, col) => { const b = document.createElement('button'); b.innerHTML = (col != null ? chip(col) : '') + label; b.style.cssText = `padding:8px 12px;border-radius:10px;border:1px solid ${on ? '#e8792f' : '#555'};background:${on ? '#3a2a1f' : '#2c2f33'};color:${on ? '#ffb27a' : '#fff'};font-size:15px`; b.onclick = f; rw.append(b); };
+    if (!pkeyHit.includes('|ROOM|')) {
+      const r1 = mkRow('この面だけ');
+      c.opts.forEach(([label, v], i) => btnIn(r1, label, PARTS[pkeyHit] === i, () => { setPart(pkeyHit, i); again(); }, swatchOf(v, n)));
+      btnIn(r1, '元に戻す', PARTS[pkeyHit] == null, () => { setPart(pkeyHit, null); again(); });
+    }
+    if (rkeyHit) {
+      const rk = rkeyHit.split('|')[2], r2 = mkRow(ROOMS[rk].label + 'の壁ぜんぶ');
+      c.opts.forEach(([label, v], i) => btnIn(r2, label, PARTS[rkeyHit] === i, () => { setPart(rkeyHit, i); again(); }, swatchOf(v, n)));
+      btnIn(r2, '元に戻す', PARTS[rkeyHit] == null, () => { setPart(rkeyHit, null); again(); });
+    }
     const cap2 = document.createElement('div'); cap2.textContent = '壁ぜんぶ'; cap2.style.cssText = 'font-size:13px;color:#bbb;margin:10px 0 4px'; pop.append(cap2);
     const row2 = document.createElement('div'); row2.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px'; pop.append(row2);
     const btn2 = (label, on, f, col) => { const b = document.createElement('button'); b.innerHTML = (col != null ? chip(col) : '') + label; b.style.cssText = `padding:8px 12px;border-radius:10px;border:1px solid ${on ? '#e8792f' : '#555'};background:${on ? '#3a2a1f' : '#2c2f33'};color:${on ? '#ffb27a' : '#fff'};font-size:15px`; b.onclick = f; row2.append(b); };
@@ -553,7 +587,7 @@ function pick(cx, cy) {
     if (n === 'glass') continue;   // ガラスの向こうを見る
     if (h.object.userData.partKey) n = h.object.userData.base.material.name;   // 切り出した壁の面
     if (!CHOICES[n]) return null;  // 一番手前の物だけ（選べない物なら何もしない）
-    return { n, pk: partKeyOf(h) };
+    return { n, pk: partKeyOf(h), rk: roomKeyOf(h) };
   }
   return null;
 }
@@ -568,7 +602,7 @@ function pick(cx, cy) {
       touches = Math.max(0, touches - 1);
       if (!t0 || e.type !== 'pointerup' || performance.now() - t0.t > 400) { t0 = null; return; }
       const hit = pick(e.clientX, e.clientY); t0 = null;
-      if (hit) openPop(hit.n, hit.pk); else closePop();
+      if (hit) openPop(hit.n, hit.pk, hit.rk); else closePop();
     };
     c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
   }, 300);
