@@ -94,6 +94,35 @@ const sidingTex = (col) => canvasTex('siding' + col, 1024, 512, (g, W, H) => {
   g.fillStyle = rgb(col, -24); g.fillRect(0, 0, W, 3);
 });
 
+// 大理石（グレーに近い黒）：地の色むら＋白っぽい太い筋＋細い筋
+const marbleTex = () => canvasTex('marble', 1024, 1024, (g, W, H) => {
+  const r = rnd(41), base = 0x2e2f31;
+  g.fillStyle = hex(base); g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 70; i++) {
+    const x = r() * W, y = r() * H, rad = 60 + r() * 220, k = (r() - 0.5) * 16;
+    wrapDraw(g, W, H, () => { const gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, rgb(base, k, 0.5)); gr.addColorStop(1, rgb(base, k, 0)); g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2); });
+  }
+  const vein = (w, a, n) => {
+    for (let v = 0; v < n; v++) {
+      let x = r() * W, y = r() * H, ang = -0.6 + r() * 0.5;
+      const pts = [[x, y]];
+      for (let k = 0; k < 40; k++) { ang += (r() - 0.5) * 0.5; x += Math.cos(ang) * 30; y += Math.sin(ang) * 30; pts.push([x, y]); }
+      wrapDraw(g, W, H, () => {
+        for (const [lw, la] of [[w * 4, a * 0.15], [w * 2, a * 0.3], [w, a]]) {
+          g.strokeStyle = `rgba(205,205,200,${la})`; g.lineWidth = lw; g.beginPath();
+          pts.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py))); g.stroke();
+        }
+      });
+    }
+  };
+  vein(2.2, 0.55, 5); vein(0.8, 0.35, 18);
+  for (let i = 0; i < 12000; i++) { g.fillStyle = rgb(base, (r() - 0.5) * 18, 0.5); g.fillRect(r() * W, r() * H, 1, 1); }
+}, 0.5, 0.5);
+const TOPS = { pattern: '天板：パターンどおり', marble: '天板：黒の大理石（グレー寄り）' };
+let topSel = 'pattern';
+try { topSel = localStorage.getItem('design_u_top') || 'pattern'; } catch (e) { /* 使えないときはパターンどおり */ }
+if (!TOPS[topSel]) topSel = 'pattern';
+
 // ---- パターン ----
 // 面の指定： [種類, …]
 //   wood（写真の木を染め直す：素材名・色・木目の強さ）／concrete（写真のコンクリートを染め直す：色・強さ）
@@ -151,6 +180,9 @@ function surface(m, spec, name) {
 const SPEC_KEYS = ['floor', 'wall', 'ceiling', 'accent', 'woodceil', 'oriage', 'kitchen', 'counter'];
 function applyTo(m, p) {
   const n = m.name;
+  if (n === 'counter' && topSel === 'marble') {   // 天板を大理石にする（どのパターンでも）
+    m.map = marbleTex(); m.normalMap = null; m.roughnessMap = null; m.color.setHex(0xffffff); m.roughness = 0.22; m.metalness = 0; m.needsUpdate = true; return;
+  }
   if (!p.floor) { restore(m); return; }
   const v = p[n];
   if (v === undefined) return;
@@ -170,8 +202,9 @@ function applyAll() {
   d.rig.traverse((o) => {
     if (!o.isMesh || !KEYS.includes(o.material.name)) return;
     const m = o.material;
-    if (m.userData.design === current) return;
-    remember(m); applyTo(m, p); m.userData.design = current;
+    const tag = current + '|' + topSel;
+    if (m.userData.design === tag) return;
+    remember(m); restore(m); applyTo(m, p); m.userData.design = tag;
   });
   // 白っぽく飛びにくいように、パターンを選んだときは少しだけ露出を下げる
   // 昼・夜の基準（u.html と同じ：昼 1.1、夜 1.0）に、パターンを選んだときだけ係数を掛ける（夜は照明で白く飛びやすいので強め）
@@ -180,6 +213,23 @@ function applyAll() {
   d.renderer.toneMappingExposure = p.floor ? base * (night ? 0.6 : 0.85) : base;
   d.ext && d.ext.invalidate && d.ext.invalidate();
   return true;
+}
+export function setTop(k) {
+  topSel = k;
+  try { localStorage.setItem('design_u_top', k); } catch (e) { /* 保存できなくても切り替えはできる */ }
+  document.querySelectorAll('.topsel').forEach((s) => { s.value = k; });
+  applyAll();
+}
+function topSelect() {
+  const s = document.createElement('select'); s.className = 'topsel'; s.style.cssText = 'font-size:14px;padding:6px';
+  for (const k in TOPS) { const o = document.createElement('option'); o.value = k; o.textContent = TOPS[k]; s.append(o); }
+  s.value = topSel; s.onchange = () => setTop(s.value); return s;
+}
+{
+  const note = document.querySelector('#designnote');
+  if (note) { const s = topSelect(); s.style.marginTop = '6px'; note.after(s); }
+  const ds = document.querySelector('#designsel');
+  if (ds) { const grp = document.createElement('span'); grp.className = 'grp'; grp.append(topSelect()); ds.parentElement.after(grp); }
 }
 export function setDesign(k) {
   current = k;
@@ -206,4 +256,4 @@ setDesign(current);
 // あとから読み込まれたモデル（窓の高さを変えたとき）にも当てる
 setInterval(applyAll, 1500);
 const nightChk = document.querySelector('#night'); if (nightChk) nightChk.addEventListener('change', () => setTimeout(applyAll, 0));   // 昼夜を切り替えたらすぐ露出を合わせる
-window._design = { setDesign, PATTERNS };
+window._design = { setDesign, setTop, PATTERNS };
