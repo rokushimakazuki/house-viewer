@@ -190,3 +190,53 @@ export function addSimpleFurniture(furn, FL1) {
   for (const x of [441.5, 501.5, 561.5]) { put(chair(), x, 150, 0); put(chair(), x, 275, Math.PI); }
   addKitchenDetails(furn, FL1);
 }
+
+// ---- テレビの大きさを切り替える（11/26）。モデルのテレビ（材料名 tv、55インチで作ってある）を、中心を変えずに拡大・縮小する ----
+// 外形は一般的な製品の大きさ（幅×高さ cm）。画面の中心の高さは床から 1.05m のまま
+const TVS = { 50: [112, 65], 55: [123, 71.5], 65: [145, 84], 75: [167, 96.5] };
+const EYE_TO_TV = 2.70;   // ソファに座った目から画面まで（m）
+let tvSize = 55;
+try { tvSize = +localStorage.getItem('tv_u') || 55; } catch (e) { /* 使えないときは 55 */ }
+if (!TVS[tvSize]) tvSize = 55;
+function tvInfo(n) {
+  const [w, h] = TVS[n], ang = 2 * Math.atan(w / 200 / EYE_TO_TV) * 180 / Math.PI;
+  return `${n}インチ：幅${w}cm・高さ${h}cm／座った目から約${EYE_TO_TV}m、横の視野角 約${ang.toFixed(0)}°（迫力の目安 30°）`;
+}
+function applyTV() {
+  const d = window._dbg; if (!d) return;
+  const [w, h] = TVS[tvSize];
+  d.rig.traverse((o) => {
+    if (!o.isMesh || !o.material || o.material.name !== 'tv') return;
+    if (!o.userData.tvBase) {   // 1回だけ：形の中心を原点に移し、位置で元に戻す（拡大の中心をテレビの中心にする）
+      o.geometry = o.geometry.clone(); o.geometry.computeBoundingBox();
+      const c = o.geometry.boundingBox.getCenter(new THREE.Vector3());
+      o.geometry.translate(-c.x, -c.y, -c.z); o.position.add(c); o.userData.tvBase = true;
+    }
+    o.scale.set(1, h / 71.5, w / 123);   // テレビは東の壁（向きは -x）。幅は z、高さは y
+  });
+  d.ext && d.ext.invalidate && d.ext.invalidate();
+}
+function setTV(n) {
+  tvSize = n;
+  try { localStorage.setItem('tv_u', String(n)); } catch (e) { /* 保存できなくても切り替えはできる */ }
+  document.querySelectorAll('.tvsel').forEach((s) => { s.value = String(n); });
+  document.querySelectorAll('.tvinfo').forEach((p) => { p.textContent = tvInfo(n); });
+  applyTV();
+}
+function tvSelect() {
+  const s = document.createElement('select'); s.className = 'tvsel'; s.style.cssText = 'font-size:14px;padding:6px';
+  for (const n of Object.keys(TVS)) { const o = document.createElement('option'); o.value = n; o.textContent = 'テレビ ' + n + 'インチ'; s.append(o); }
+  s.value = String(tvSize); s.onchange = () => setTV(+s.value); return s;
+}
+{
+  const note = document.querySelector('#designnote');
+  if (note) {
+    const s = tvSelect(); s.style.marginTop = '6px';
+    const p = document.createElement('p'); p.className = 'sub tvinfo'; p.style.margin = '4px 0 0'; p.textContent = tvInfo(tvSize);
+    note.after(s, p);
+  }
+  const ds = document.querySelector('#designsel');
+  if (ds) { const grp = document.createElement('span'); grp.className = 'grp'; grp.append(tvSelect()); ds.parentElement.after(grp); }
+}
+setInterval(applyTV, 1500);   // 窓の高さを変えて別のモデルを読み込んだときにも当てる
+window._tv = { setTV, TVS, tvInfo };
