@@ -240,3 +240,80 @@ function tvSelect() {
 }
 setInterval(applyTV, 1500);   // 窓の高さを変えて別のモデルを読み込んだときにも当てる
 window._tv = { setTV, TVS, tvInfo };
+
+// ---- テレビにサンプル映像を映す（11/26）。絵はこのファイルの中で描く（山と湖の風景。雲と光がゆっくり動く） ----
+const SCR_W = 1.218 / 1.23, SCR_H = 0.685 / 0.715;   // 外形に対する画面の割合（55インチの値。どのサイズもほぼ同じ）
+const scr = document.createElement('canvas'); scr.width = 960; scr.height = 540;
+const sg = scr.getContext('2d');
+const scrTex = new THREE.CanvasTexture(scr); scrTex.colorSpace = THREE.SRGBColorSpace;
+const scrMat = new THREE.MeshBasicMaterial({ map: scrTex, toneMapped: false, color: 0xd8d8d8 });
+scrMat.name = 'tvscreen';
+let tvOn = true;
+try { tvOn = localStorage.getItem('tv_on_u') !== '0'; } catch (e) { /* 使えないときは映す */ }
+// 山の稜線（毎回同じ形になるよう、決まった乱数で作っておく）
+const ridges = [0, 1, 2].map((k) => { let a = 7 + k * 13; const r = () => { a = (a * 16807) % 2147483647; return a / 2147483647; }; const pts = []; let y = 0.5; for (let i = 0; i <= 48; i++) { y += (r() - 0.5) * (0.09 - k * 0.02); y = Math.min(0.75, Math.max(0.2, y)); pts.push(y); } return pts; });
+const clouds = Array.from({ length: 7 }, (_, i) => ({ x: (i * 173) % 960, y: 40 + ((i * 61) % 140), w: 120 + ((i * 37) % 120), v: 6 + (i % 3) * 4 }));
+function drawScreen(t) {
+  const W = 960, H = 540, HOR = 330;
+  const sky = sg.createLinearGradient(0, 0, 0, HOR);
+  sky.addColorStop(0, '#24365e'); sky.addColorStop(0.55, '#e7876a'); sky.addColorStop(1, '#f8c98a');
+  sg.fillStyle = sky; sg.fillRect(0, 0, W, HOR);
+  const sx = 640, sy = 250 + Math.sin(t / 20) * 6;   // 夕日
+  const sun = sg.createRadialGradient(sx, sy, 10, sx, sy, 160); sun.addColorStop(0, 'rgba(255,240,200,1)'); sun.addColorStop(0.15, 'rgba(255,214,150,.9)'); sun.addColorStop(1, 'rgba(255,180,120,0)');
+  sg.fillStyle = sun; sg.fillRect(0, 0, W, HOR);
+  for (const c of clouds) {   // 雲
+    const x = ((c.x + t * c.v) % (W + 300)) - 150;
+    sg.fillStyle = 'rgba(255,225,215,.55)';
+    for (let k = 0; k < 4; k++) { sg.beginPath(); sg.ellipse(x + k * c.w * 0.25, c.y + (k % 2) * 8, c.w * 0.3, 16, 0, 0, Math.PI * 2); sg.fill(); }
+  }
+  const cols = ['#7a6a8e', '#4f4a6e', '#2c2c47'];
+  ridges.forEach((pts, k) => {   // 山（奥から手前へ）
+    sg.fillStyle = cols[k]; sg.beginPath(); sg.moveTo(0, HOR);
+    pts.forEach((y, i) => sg.lineTo((i / 48) * W, HOR - (1 - y) * (120 + k * 40) + k * 20));
+    sg.lineTo(W, HOR); sg.closePath(); sg.fill();
+  });
+  // 湖（空と山を上下逆に映し、横に揺らす）
+  sg.save(); sg.translate(0, HOR * 2); sg.scale(1, -1);
+  sg.globalAlpha = 0.55; sg.drawImage(scr, 0, 0, W, HOR, 0, 0, W, HOR); sg.restore(); sg.globalAlpha = 1;
+  sg.fillStyle = 'rgba(20,30,60,.35)'; sg.fillRect(0, HOR, W, H - HOR);
+  for (let y = HOR + 4; y < H; y += 6) {   // さざ波
+    const off = Math.sin(t * 2 + y * 0.15) * 20;
+    sg.fillStyle = `rgba(255,220,180,${0.05 + 0.1 * Math.max(0, 1 - Math.abs(off + 640 - sx) / 300)})`;
+    sg.fillRect(sx - 60 + off - (y - HOR) * 0.4, y, 120 + (y - HOR) * 0.8, 2);
+  }
+  // 手前の小舟
+  const bx = 200 + (t * 8) % 700;
+  sg.fillStyle = '#1b1b28'; sg.beginPath(); sg.moveTo(bx, 430); sg.lineTo(bx + 70, 430); sg.lineTo(bx + 58, 442); sg.lineTo(bx + 10, 442); sg.closePath(); sg.fill();
+  sg.fillRect(bx + 32, 392, 3, 38);
+  sg.beginPath(); sg.moveTo(bx + 35, 394); sg.lineTo(bx + 60, 426); sg.lineTo(bx + 35, 426); sg.closePath(); sg.fill();
+  scrTex.needsUpdate = true;
+}
+function attachScreens() {
+  const d = window._dbg; if (!d) return;
+  d.rig.traverse((o) => {
+    if (!o.isMesh || !o.material || o.material.name !== 'tv' || !o.userData.tvBase || o.userData.screen) return;
+    o.geometry.computeBoundingBox();
+    const bb = o.geometry.boundingBox, w = bb.max.z - bb.min.z, h = bb.max.y - bb.min.y;
+    const g = new THREE.PlaneGeometry(w * SCR_W, h * SCR_H); g.rotateY(-Math.PI / 2);   // 画面は西（-x）向き
+    const p = new THREE.Mesh(g, scrMat); p.position.x = bb.min.x - 0.001; p.userData.noOcc = true;
+    o.add(p); o.userData.screen = p; p.visible = tvOn;
+  });
+}
+function setTVOn(on) {
+  tvOn = on;
+  try { localStorage.setItem('tv_on_u', on ? '1' : '0'); } catch (e) { /* 保存できなくても切り替えはできる */ }
+  const d = window._dbg; d && d.rig.traverse((o) => { if (o.userData.screen) o.userData.screen.visible = on; });
+  document.querySelectorAll('.tvonbtn').forEach((b) => { b.textContent = on ? '映像を消す' : '映像を映す'; b.classList.toggle('on', on); });
+}
+function tvOnButton() { const b = document.createElement('button'); b.className = 'tvonbtn'; b.onclick = () => setTVOn(!tvOn); return b; }
+document.querySelectorAll('.tvsel').forEach((s) => s.after(tvOnButton()));
+setTVOn(tvOn);
+let t0 = performance.now();
+setInterval(() => {
+  attachScreens();
+  if (!tvOn || document.hidden) return;
+  drawScreen((performance.now() - t0) / 1000);
+  const d = window._dbg; d && d.ext && d.ext.invalidate && d.ext.invalidate();
+}, 100);
+drawScreen(0);
+window._tv.setTVOn = setTVOn; window._tv.drawScreen = drawScreen;
