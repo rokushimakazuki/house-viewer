@@ -377,7 +377,7 @@ function topSelect() {
   if (note) {
     const s = topSelect(); s.style.marginTop = '6px'; note.after(s);
     const hint = document.createElement('p'); hint.className = 'sub'; hint.style.margin = '6px 0 0';
-    hint.textContent = '「中から見る」で、変えたい所（壁・天井・床・木の部分・キッチン・テーブル・椅子・ラグ・畳など）を軽くタップすると、色や素材を選べます。二本指を広げると見ている方向へ進み（上を見れば上がる）、近づけると下がります。二本指をそろえて左右になぞると横に動きます。';
+    hint.textContent = '「中から見る」で、変えたい所（壁・天井・床・木の部分・キッチン・テーブル・椅子・ラグ・畳など）を軽くタップすると、色や素材を選べます。二本指を広げると前へ進み、近づけると後ろへ下がります（高さは変わりません）。上下は右の「上へ／下へ」ボタンを押している間だけ動きます。二本指をそろえて左右になぞると横に動きます。';
     s.after(hint);
   }
   const ds = document.querySelector('#designsel');

@@ -983,9 +983,9 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 renderer.domElement.addEventListener('pointermove', (e) => {
   if (!inside.on) return;
   if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (ptrs.size >= 2 && pinch != null) {   // 2本指：広げる＝見ている方向へ進む（上を見ていれば上がる）、近づける＝下がる、そろえて左右＝横に動く（11/27）
+  if (ptrs.size >= 2 && pinch != null) {   // 2本指：広げる＝前へ進む、近づける＝後ろへ下がる（高さは変わらない。上下は右の「上へ／下へ」ボタン）、そろえて左右＝横に動く（11/27）
     const t = two();
-    fly((t.d - pinch.d) * 0.012);    // 100px 広げると約1.2m 進む
+    walk((t.d - pinch.d) * 0.012);   // 100px 広げると約1.2m 進む（水平に）
     strafe(-(t.x - pinch.x) * 0.01); // 指を右へ＝左へずれる（景色をつかんで動かす向き）
     pinch = t; return;
   }
@@ -1001,7 +1001,7 @@ const endDrag = (e) => {
 };
 renderer.domElement.addEventListener('pointerup', endDrag);
 renderer.domElement.addEventListener('pointercancel', endDrag);
-renderer.domElement.addEventListener('wheel', (e) => { if (inside.on) { e.preventDefault(); if (e.shiftKey) rise(-Math.sign(e.deltaY || e.deltaX) * 0.2); else fly(-Math.sign(e.deltaY) * 0.3); } }, { passive: false });   // Shift＋ホイール＝上下
+renderer.domElement.addEventListener('wheel', (e) => { if (inside.on) { e.preventDefault(); if (e.shiftKey) rise(-Math.sign(e.deltaY || e.deltaX) * 0.2); else walk(-Math.sign(e.deltaY) * 0.3); } }, { passive: false });   // Shift＋ホイール＝上下
 
 // ▲▼ 押している間だけ進む／下がる
 // 上へ／下へ：押している間だけ上下に動く（11/27）
