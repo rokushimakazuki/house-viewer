@@ -60,8 +60,8 @@ function route(a, b) {   // いちばん短い道（ダイクストラ）
 const PEOPLE = [
   { id: 'papa', name: '父（31）', col: 0x3f6fb0, h: 1.72, v: 1.15 },
   { id: 'mama', name: '母（32）', col: 0xd05a5a, h: 1.60, v: 1.1 },
-  { id: 'k1', name: '上の子（4）', col: 0xe89a20, h: 1.03, v: 0.85 },
-  { id: 'k2', name: '下の子（2）', col: 0x4aa060, h: 0.86, v: 0.7 },
+  { id: 'k1', name: '息子（4）', col: 0xe89a20, h: 1.03, v: 0.85 },
+  { id: 'k2', name: '娘（2）', col: 0x4aa060, h: 0.86, v: 0.7 },
   { id: 'baby', name: '赤ちゃん（0）', col: 0xe880b0, h: 0.6, v: 1.1, baby: true },
 ];
 const SCEN = {
@@ -70,7 +70,7 @@ const SCEN = {
     papa: [['06:00', 'bed3', '寝ている'], ['06:40', 'toil2', 'トイレ'], ['06:44', 'senmen', '歯みがき・ひげそり'], ['06:53', 'wic', '着替え'], ['07:01', 'dining', '朝ごはん', 'eat'],
       ['07:18', 'toil1', 'トイレ'], ['07:22', 'shoecl', '靴・かばん'], ['07:26', 'genkan', 'いってきます'], ['07:28', 'road', '出発（駅へ）']],
     mama: [['06:00', 'bed2', '寝ている'], ['06:05', 'toil2', 'トイレ'], ['06:09', 'senmen', '洗顔'], ['06:15', 'wic', '着替え'], ['06:21', 'laundry', '洗濯機を回す'],
-      ['06:25', 'kitchen', '朝ごはんの準備'], ['06:37', 'yo3', '子どもを起こす', 'wake'], ['06:42', 'toil2', '上の子のトイレに付きそう', 'k1t'], ['06:47', 'kitchen', '朝ごはんの仕上げ'],
+      ['06:25', 'kitchen', '朝ごはんの準備'], ['06:37', 'yo3', '子どもを起こす', 'wake'], ['06:42', 'toil2', '息子のトイレに付きそう', 'k1t'], ['06:47', 'kitchen', '朝ごはんの仕上げ'],
       ['07:02', 'dining', '子どもと朝ごはん', 'eat'], ['07:30', 'kitchen', '片付け'], ['07:55', 'yo2_chest', '子どもの着替え', 'dress'], ['08:07', 'senmen', '子どもの歯みがき', 'teeth'],
       ['08:15', 'shoecl', 'くつ・帽子・かばん', 'shoes'], ['08:24', 'bike', '自転車に乗せる', 'bike'], ['08:30', 'road', '幼稚園へ出発', 'bike']],
     k1: [['06:00', 'bed1', '寝ている'], ['06:39', 'yo3', '起きる', 'wake'], ['06:42', 'toil2', 'トイレ', 'k1t'], ['06:47', 'washitsu', '和室で遊ぶ', 'kplay'], ['07:02', 'dining', '朝ごはん', 'eat'],
@@ -300,22 +300,28 @@ function update() {
   box.querySelector('#simclk').textContent = fmt(t);
   box.querySelector('#simt').value = (t - tmin(S.t0)) / (tmin(S.t1) - tmin(S.t0)) * 100;
   let wh = '';
+  const babyHeld = posAt(P, 'baby', t).carried;   // 抱っこ中は母の名札を「母・赤ちゃん」にする
   for (const p of PEOPLE) {
     const q = posAt(P, p.id, t), f = state.figs[p.id];
     f.position.set(PX(q.x), state.FL1 + q.h, PZ(q.y));
     // 向き：歩いている方向
     if (q.walking) { const nx = posAt(P, p.id, t + 0.05); const dx = PX(nx.x) - PX(q.x), dz = PZ(nx.y) - PZ(q.y); if (Math.hypot(dx, dz) > 1e-4) f.rotation.y = Math.atan2(dx, dz); }
     f.rotation.x = 0; f.rotation.z = q.lying && !p.baby ? Math.PI / 2 : 0;
-    if (q.lying && !p.baby) { f.position.y += 0.15; f.rotation.y = Math.PI; }   // 寝ている人は頭が東（まくらの側）
-    const act = q.seg.act, top = state.view !== 'in', txt = top ? p.name.replace(/（.*/, '') : p.name.replace(/（.*/, '') + '：' + act;
+    if (q.lying && !p.baby) { f.position.y += 0.15; f.rotation.y = Math.PI; if (q.seg.node === 'bed1') f.position.z += p.id === 'k1' ? -0.22 : 0.22; }   // 息子と娘は同じベッドに並んで寝る   // 寝ている人は頭が東（まくらの側）
+    const act = q.seg.act, top = state.view !== 'in', nm = p.name.replace(/（.*/, '') + (p.id === 'mama' && babyHeld ? '・赤ちゃん' : ''), txt = top ? nm : nm + '：' + act;
     if (state.labels[p.id] !== txt) {
       if (f.userData.lab) f.remove(f.userData.lab);
       const L = label(txt, p.col); f.add(L); f.userData.lab = L; state.labels[p.id] = txt;
     }
-    if (f.userData.lab) f.userData.lab.visible = !q.carried && (state.view === 'in' || p.id === state.sel);   // 上から見るときは、選んだ人だけ名札（ほかの人は色で見分ける）
+    if (f.userData.lab) f.userData.lab.visible = !q.carried;   // 全員に名札（抱っこ中の赤ちゃんは母の名札にまとめる）
     f.userData.disc.visible = !q.carried && !q.lying;
     f.visible = state.view === 'in' || (q.h > 1.6 ? 2 : 1) === state.floor;   // 上から見るときは、見ている階の人だけ
-    if (f.userData.lab) { const k = state.view === 'in' ? 1 : 2.0; f.userData.lab.scale.copy(f.userData.lab.userData.base).multiplyScalar(k); f.userData.lab.position.y = (k > 1 ? 1.6 : p.h + 0.25); }
+    if (f.userData.lab) {   // 上から見るときは大きめ。選んだ人はさらに大きく。重ならないよう人ごとに高さをずらす
+      const L = f.userData.lab, k = state.view === 'in' ? 1 : (p.id === state.sel ? 2.0 : 1.6), rel = (q.h > 1.6 ? q.h - FL2 : q.h) + (q.lying && !p.baby ? 0.15 : 0),   // 床からの高さ（ベッドの上なら約0.6）
+        yy = state.view === 'in' ? p.h + 0.25 : 1.0 + PEOPLE.indexOf(p) * 0.17 - rel;   // 上から見るときは床から 1.0〜1.7m（2.1m で切っているのでその下）
+      L.scale.copy(L.userData.base).multiplyScalar(k);
+      if (q.lying && !p.baby) L.position.set(yy, 0, 0); else L.position.set(0, yy, 0);   // 寝ている人は体が横向きなので、体の x が上
+    }
     const where = N[q.walking ? q.on[1] : (q.seg.node === 'mom' ? 'kitchen' : q.seg.node)];
     wh += `<div class="who${state.sel === p.id ? ' sel' : ''}" data-id="${p.id}"><span class="dot" style="background:#${p.col.toString(16).padStart(6, '0')}"></span><div><b>${p.name}</b>　${q.carried ? 'ママに抱っこ' : act}<div class="sub">${q.carried ? '' : (q.walking ? '移動中' : where[3])}</div></div></div>`;
   }
