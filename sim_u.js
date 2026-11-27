@@ -273,6 +273,7 @@ function build() {
     <div class="sub" style="display:flex;gap:6px;align-items:center"><label style="flex:none"><input type="checkbox" id="simsunon" checked> 日差し・暗さも合わせる</label><span id="simsun"></span></div>
     <div><button data-view="auto" class="on">自動</button><button data-view="1">上から1階</button><button data-view="2">上から2階</button><button data-view="in">中から</button><button data-view="eye">目線で歩く</button>
       <label class="sub"><input type="checkbox" id="simtrail" checked> 歩いた道</label> <label class="sub"><input type="checkbox" id="simdark"> 暗い中の道（黄）</label></div>
+    <div><select id="simlt" aria-label="照明の点け方"><option value="all">照明：全部点ける</option><option value="people">照明：人のいる所だけ</option></select><button id="simltb">照明の一覧</button></div>
     <details id="simppl" open><summary><b>家族</b> <span class="sub">名前をタップ＝その人を追いかける</span></summary><div id="simwho"></div></details>
     <details id="simdk"><summary><b>暗い中で歩く所（照明・スイッチ・外灯）</b></summary><div id="simdkb"></div></details>
     <details id="simres"><summary><b>結果（歩いた距離・混み合い）</b></summary><div id="simresb"></div><div class="sub" id="simguess" style="margin-top:6px"></div></details>
@@ -294,6 +295,8 @@ function build() {
   tap($('#simx'), () => close());
   tap($('#simmin'), () => fold(!box.classList.contains('min')));
   $('#simsc').onchange = () => loadScene($('#simsc').value);
+  $('#simlt').onchange = () => { window._light && window._light.setMode($('#simlt').value); };
+  tap($('#simltb'), () => { window._light && window._light.open(); });
   $('#simdark').onchange = () => { state.darkG.visible = $('#simdark').checked; inval(); };
   tap($('#simplay'), () => { state.play = !state.play; if (!state.play) sunSync(true); if (state.play && state.t >= rng()[1] - 0.01) state.t = rng()[0]; setPlayBtn(); state.last = performance.now(); loop(); });
   tap($('#simwho'), (e) => { const x = e.target.closest && e.target.closest('.who'); if (!x) return; state.sel = x.dataset.id; state.eyeInit = false; applyView(true); update(); });
@@ -391,6 +394,12 @@ function update() {
     }
     const where = N[q.walking ? q.on[1] : (q.seg.node === 'mom' ? 'kitchen' : q.seg.node)];
     wh += `<div class="who${state.sel === p.id ? ' sel' : ''}" data-id="${p.id}"><span class="dot" style="background:#${p.col.toString(16).padStart(6, '0')}"></span><div><b>${p.name}</b>　${q.carried ? 'ママに抱っこ' : act}<div class="sub">${q.carried ? '' : (q.walking ? '移動中' : where[3])}</div></div></div>`;
+  }
+  // 照明：人のいる場所（寝ている人・抱っこの赤ちゃんは数えない）を照明の板に伝える
+  if (window._light) {
+    const occ = new Set();
+    for (const p of PEOPLE) { const q = posAt(P, p.id, t); if (q.carried || q.lying) continue; if (q.walking) { occ.add(areaOf(q.on[0])); occ.add(areaOf(q.on[1])); } else occ.add(areaOf(q.seg.node)); }
+    window._light.setOcc(occ);
   }
   const w = box.querySelector('#simwho'); if (w.dataset.h !== wh) { w.innerHTML = wh; w.dataset.h = wh; }   // 変わったときだけ書き換える（指の下の名前が消えないように）
   // 目線で歩くときは、色の線（歩いた道）は視界のじゃまになるので消す。暗い中の道（黄）は壁の向こうを透かさない
@@ -695,7 +704,7 @@ function open() {
 }
 function close() {
   if (state.view === 'eye') { state.view = 'auto'; for (const b of state.box.querySelectorAll('[data-view]')) b.classList.toggle('on', b.dataset.view === 'auto'); }
-  eyeOff(); restoreQuality();
+  eyeOff(); restoreQuality(); if (window._light) window._light.setOcc(null);
   const ui = document.getElementById('ui'); if (ui && !state.d.inside.on) ui.style.display = state.uiDisp || '';
   state.play = false; sunRestore(); state.box.style.display = 'none'; state.root.visible = false; state.ind.style.display = 'none'; state.d.renderer.clippingPlanes = []; lastFloor = null; state.d.applySun && state.d.applySun(); inval();   // 日の当たる床の面積は閉じてから計算し直す
 }
@@ -708,4 +717,4 @@ function addButtons() {
   const b2 = document.createElement('button'); b2.textContent = '暮らしの動き'; b2.onclick = open; bar.parentNode.insertBefore(b2, bar);
 }
 addButtons();
-window._sim = { open, close, plan, analyze, SCEN, SCENES, PEOPLE, N, route, loadScene, darkStudy, perfWatch, isOpen: () => !!state && state.box.style.display !== 'none', playing: () => !!state && state.play && state.box.style.display !== 'none' };
+window._sim = { viewFloor: () => (state && !isIn() ? state.floor : null), open, close, plan, analyze, SCEN, SCENES, PEOPLE, N, route, loadScene, darkStudy, perfWatch, isOpen: () => !!state && state.box.style.display !== 'none', playing: () => !!state && state.play && state.box.style.display !== 'none' };

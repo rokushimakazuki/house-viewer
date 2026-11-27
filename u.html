@@ -119,7 +119,7 @@
       <option value="9-23">秋分（9/23）</option>
       <option value="today">今日</option>
     </select>
-    <input class="hour" type="range" min="6" max="18" step="0.25" value="10">
+    <input class="hour" type="range" min="5" max="23" step="0.25" value="10">
     <span class="t">10:00</span>
     <button class="play" title="1日を早送り">▶</button>
   </div>
@@ -204,7 +204,7 @@
       <option value="9-23">秋分（9/23）</option>
       <option value="today">今日</option>
     </select>
-    <input class="hour" type="range" min="6" max="18" step="0.25" value="10">
+    <input class="hour" type="range" min="5" max="23" step="0.25" value="10">
     <span class="t">10:00</span>
     <button class="play" title="1日を早送り">▶</button>
   </div></div>
@@ -379,7 +379,11 @@ function applySun() {
   } else { hemi.color.set(0xfff4e6); hemi.groundColor.set(0x8a7a66); }
   syncSunUI();
   scheduleSunArea();
+  // 日の入り後・日の出前は、自動で「夜にする（照明をつける）」。手で切り替えた場合は、次に日が出入りするまでそのまま
+  const darkNow = alt <= 0.01;
+  if (ext && darkNow !== lastDark) { lastDark = darkNow; if (ext.isNight() !== darkNow) { ext.setNight(darkNow); const n = document.getElementById('night'); if (n) n.checked = darkNow; } }
 }
+let lastDark = null;
 // 日の当たる床の面積（少し待ってから計算。スライダーを動かしている間は重くしない）
 let sunAreaTimer = 0;
 function scheduleSunArea() {
@@ -413,9 +417,9 @@ let playTimer = 0;
 function stopPlay() { clearInterval(playTimer); playTimer = 0; document.querySelectorAll('button.play').forEach((b) => { b.textContent = '▶'; }); }
 document.querySelectorAll('button.play').forEach((b) => b.onclick = () => {
   if (playTimer) { stopPlay(); return; }
-  if (sunState.hour >= 17.75) setHour(6);
+  if (sunState.hour >= 22.75) setHour(6);
   document.querySelectorAll('button.play').forEach((x) => { x.textContent = '■'; });
-  playTimer = setInterval(() => { const h = Math.round((sunState.hour + 0.05) * 100) / 100; if (h > 18) { stopPlay(); return; } setHour(h); if (typeof drawHud === 'function') drawHudThrottled(); }, 50);   // 1時間＝1秒
+  playTimer = setInterval(() => { const h = Math.round((sunState.hour + 0.05) * 100) / 100; if (h > 23) { stopPlay(); return; } setHour(h); if (typeof drawHud === 'function') drawHudThrottled(); }, 50);   // 1時間＝1秒
 });
 applySun();
 // 毎フレーム：家が動いても太陽の向きは家（＝真北）に対して決まる。影の範囲は家の中心に合わせる
@@ -1075,5 +1079,6 @@ function drawHudThrottled() { const n = performance.now(); if (n - hudTimer > 15
 </script>
 <script type="module" src="design_u.js"></script>
 <script type="module" src="sim_u.js"></script>
+<script type="module" src="light_u.js"></script>
 </body>
 </html>

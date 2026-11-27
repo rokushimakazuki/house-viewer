@@ -250,6 +250,7 @@ export function initExtras(ctx) {
     [-3.868, C1, -3.415, 90],                                                                                             // ポーチ
   ];
   const voidLights = [];   // 吹抜けの天井の照明（通常／ハーフで高さを変える）
+  LIGHTS.length = 0;   // 11/28：家の中の照明は light_u.js（照明計画）に置き換えた。ここでは外の街灯だけ点ける
   for (const [x, y, z, cd] of LIGHTS) {
     const l = new THREE.PointLight(0xffe2bd, cd * LIGHT_K, 0, 2); l.position.set(x, y - 0.06, z); lights.add(l);
     const f = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.012, 16), fixtureM); f.position.set(x, y + 0.004, z); fixtures.add(f);
