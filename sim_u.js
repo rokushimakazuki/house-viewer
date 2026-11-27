@@ -202,12 +202,12 @@ function figure(p) {
 
 // ---- 画面（下の板）----
 const css = `
-#simbox{position:fixed;left:10px;top:10px;z-index:52;width:min(380px,94vw);max-height:62vh;overflow:auto;background:rgba(28,30,33,.94);color:#fff;border-radius:14px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.4);font-size:14px;line-height:1.45;display:none}
+#simbox{position:fixed;left:10px;top:10px;z-index:52;width:min(380px,94vw);max-height:46vh;overflow:auto;overflow-wrap:anywhere;background:rgba(28,30,33,.94);color:#fff;border-radius:14px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.4);font-size:14px;line-height:1.45;display:none}
 #simbox.min .simbody{display:none}
 #simbox button,#simbox select{font:inherit;font-size:13px;border-radius:8px;border:1px solid #555;background:#2c3035;color:#fff;padding:5px 9px;margin:2px 2px}
 #simbox button.on{background:#d85a10;border-color:#d85a10}
-#simbox .clock{font-size:26px;font-weight:700;letter-spacing:1px}
-#simbox .who{display:flex;gap:6px;align-items:flex-start;padding:2px 0;cursor:pointer}
+#simbox .clock{font-size:26px;font-weight:700;letter-spacing:1px;white-space:nowrap;flex:none}
+#simbox .who{display:flex;gap:6px;align-items:flex-start;padding:1px 0;cursor:pointer;font-size:13px}#simbox .who .sub{display:inline;margin-left:6px}#simbox .who > div{display:block}
 #simbox .who.sel{background:rgba(255,255,255,.08);border-radius:6px}
 #simbox .dot{width:12px;height:12px;border-radius:50%;margin-top:4px;flex:none}
 #simbox .sub{color:#b8bcc0;font-size:12px}
@@ -228,8 +228,7 @@ function build() {
     <div><span class="sub">見る：</span><button data-view="auto" class="on">自動</button><button data-view="1">上から1階</button><button data-view="2">上から2階</button><button data-view="in">中から</button>
       <label class="sub"><input type="checkbox" id="simtrail" checked> 歩いた道</label></div>
     <div class="sub">名前をタップすると、その人を追いかけて名札を出します。</div><div id="simwho"></div>
-    <details id="simres" style="margin-top:6px"><summary><b>結果（歩いた距離・混み合い）</b></summary><div id="simresb"></div></details>
-    <div class="sub" id="simguess" style="margin-top:6px"></div>
+    <details id="simres" style="margin-top:6px"><summary><b>結果（歩いた距離・混み合い）</b></summary><div id="simresb"></div><div class="sub" id="simguess" style="margin-top:6px"></div></details>
   </div></div>`);
   document.body.append(box);
   const root = new THREE.Group(); root.name = 'sim'; d.furn.add(root);
@@ -317,7 +316,10 @@ function applyView(force) {
   const c = d.furn.localToWorld(new THREE.Vector3(PX(477.75), base, PZ(409.5)));
   const cut = d.furn.localToWorld(new THREE.Vector3(0, base + 2.1, 0)).y;
   d.renderer.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, -1, 0), cut)];
-  if (d.orbit) { d.camera.position.set(c.x, c.y + 10, c.z + 5); d.orbit.target.copy(c); d.orbit.update(); }
+  if (d.orbit) {   // 縦長の画面（スマホ）は少し引いて、上の操作板に隠れないよう家を下に寄せる
+    const asp = innerWidth / innerHeight, k = Math.max(1, 1.3 / asp), sh = asp < 1 ? 6 : 0;
+    d.camera.position.set(c.x, c.y + 10 * k, c.z + 5 * k - sh); d.orbit.target.set(c.x, c.y, c.z - sh); d.orbit.update();
+  }
   inval();
 }
 function loop() {
@@ -332,9 +334,11 @@ function loop() {
 function open() {
   if (!state && !build()) return;
   state.box.style.display = 'block'; state.root.visible = true;
+  const ui = document.getElementById('ui'); if (ui) { state.uiDisp = ui.style.display; ui.style.display = 'none'; }   // スマホで重ならないように、説明の板は隠す
   if (!state.P) load('am'); else applyView(true);
 }
 function close() {
+  const ui = document.getElementById('ui'); if (ui && !state.d.inside.on) ui.style.display = state.uiDisp || '';
   state.play = false; state.box.style.display = 'none'; state.root.visible = false; state.d.renderer.clippingPlanes = []; lastFloor = null; inval();
 }
 // ボタンを置く（外から見るときの左の板と、中から見るときの下の操作）
