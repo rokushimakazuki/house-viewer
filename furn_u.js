@@ -197,7 +197,7 @@ export function addSimpleFurniture(furn, FL1) {
 // ---- テレビの大きさを切り替える（11/26）。モデルのテレビ（材料名 tv、55インチで作ってある）を、中心を変えずに拡大・縮小する ----
 // 外形は一般的な製品の大きさ（幅×高さ cm）。画面の中心の高さは床から 1.05m のまま
 const TVS = { 50: [112, 65], 55: [123, 71.5], 65: [145, 84], 75: [167, 96.5] };
-const EYE_TO_TV = 2.70;   // ソファに座った目から画面まで（m）
+const EYE_TO_TV = 2.58;   // 11/27 テレビの壁をふかしたので 12cm 近い   // ソファに座った目から画面まで（m）
 let tvSize = 55;
 try { tvSize = +localStorage.getItem('tv_u') || 55; } catch (e) { /* 使えないときは 55 */ }
 if (!TVS[tvSize]) tvSize = 55;
@@ -352,7 +352,7 @@ const UNITS = [
     door: { type: 'leaf', x: 136.5, y0: 555.5, y1: 627.5, h0: 0, h1: 2.0, sync: 'door' },
     note: '入口はホール南の側（幅約73cm）。奥（西）に棚、手前は掃除機などを置く' },
   // ---- 1階 収納(1)：回り階段の下。和室から開ける押入れ（家のモデルの扉を回す）----
-  { id: 'store1', name: '収納(1)（階段下）', lv: '1', r: [233, 552, 314, 631], h: [0, 1.4], f: 'E', kind: 'shelf', col: 0x6b8f5e,
+  { id: 'store1', name: '収納(1)（階段下）', lv: '1', r: [233, 552, 314, 631], h: [0.24, 1.46], f: 'E', kind: 'shelf', col: 0x6b8f5e,
     b: [0],
     it: [[0, '来客用マットレス 2枚（三つ折りを立てて）', 2, 'mattress', 0.24, 0.97, 0.65, 0xe9e3d5], [0, '掛け布団・まくら（圧縮袋）', 1, 'futon', 0.26, 0.5, 0.6, 0x9db0c4]],
     door: { type: 'glb', mat: 'washdoor', knob: 'washknob' },
@@ -379,12 +379,12 @@ const UNITS = [
     it: [[0, 'ホットプレート・グリル鍋（箱）', 2, 'cb', 0.38, 0.22, 0.4, CB], [1, 'ホームベーカリー', 1, 'hb', 0.28, 0.38, 0.38, 0xf1efe9], [1, 'お米', 1, 'ricebag', 0.25, 0.38, 0.38, 0xdcdcdc],
       [2, '食品ストック（かご）', 3, 'bk_food', 0.25, 0.2, 0.35, 0xc8a878], [3, '食品ストック（かご）', 3, 'bk_food', 0.25, 0.2, 0.35, 0xc8a878], [4, '紙皿・季節の調理器具', 2, 'cont', 0.36, 0.18, 0.35, 0xd7d2c8]] },
   // ---- 和室（遊び場）----
-  { id: 'toys', name: 'おもちゃ棚・絵本ラック', lv: '1', r: [325, 460, 365, 545], h: [0.3, 1.1], f: 'E', kind: 'shelf', col: 0xd0a030,
+  { id: 'toys', name: 'おもちゃ棚・絵本ラック', lv: '1', r: [325, 460, 365, 545], h: [0.24, 1.04], f: 'E', kind: 'shelf', col: 0xd0a030,
     b: [0, 0.3, 0.56],
     it: [[0, 'おもちゃ（かご）', 3, 'bk_toy', 0.26, 0.22, 0.3, KID], [1, '絵本', 3, 'book', 0.26, 0.23, 0.2, [0x5fa8d3, 0xf2cc8f, 0xe07a5f]], [2, 'ぬいぐるみ・小物', 3, 'plush', 0.24, 0.18, 0.25, KID.slice(2)]] },
-  { id: 'kitchen_toy', name: 'おままごとキッチン', lv: '1', r: [325, 380, 365, 455], h: [0.3, 1.2], f: 'E', kind: 'item', col: 0xd0a030 },
-  { id: 'slide', name: 'すべり台・ブランコ（折りたたみ）', lv: '1', r: [440, 450, 580, 620], h: [0.3, 1.5], f: 'N', kind: 'item', col: 0xd0a030 },
-  { id: 'mat', name: '折りたたみマット', lv: '1', r: [375, 368, 435, 398], h: [0.3, 0.5], f: 'S', kind: 'item', col: 0xd0a030, note: '収納(1)の扉が開く範囲（扉から60cm）をあけた' },
+  { id: 'kitchen_toy', name: 'おままごとキッチン', lv: '1', r: [325, 380, 365, 455], h: [0.24, 1.14], f: 'E', kind: 'item', col: 0xd0a030 },
+  { id: 'slide', name: 'すべり台・ブランコ（折りたたみ）', lv: '1', r: [440, 450, 580, 620], h: [0.24, 1.44], f: 'N', kind: 'item', col: 0xd0a030 },
+  { id: 'mat', name: '折りたたみマット', lv: '1', r: [375, 368, 435, 398], h: [0.24, 0.44], f: 'S', kind: 'item', col: 0xd0a030, note: '収納(1)の扉が開く範囲（扉から60cm）をあけた' },
   // ---- 2階 WIC ----
   { id: 'wicdr', name: 'WIC の引き出しケース', lv: '2', r: [10, 770, 262, 815], h: [0, 0.72], f: 'N', kind: 'drawers', col: 0xb05a6a, carcass: 'case', front: 'case',
     cols: 4, rows: [[0.36, 0.72], [0, 0.36]],
@@ -397,7 +397,7 @@ const UNITS = [
       [2, '帽子・ベルト・小物（かご）', 3, 'bk_misc', 0.3, 0.2, 0.3, 0xc8a878], [3, 'シーズン外の小物（箱）', 3, 'cb', 0.35, 0.25, 0.3, CB]],
     note: '入口（北の壁の西より）にかからないよう、東に寄せた' },
   // ---- 2階 ランドリー・子ども部屋 ----
-  { id: 'laundry', name: 'ランドリーの棚', lv: '2', r: [5, 520, 40, 632], h: [0, 1.8], f: 'E', kind: 'shelf', col: 0x3f9a9a,
+  { id: 'laundry', name: 'ランドリーの棚', lv: '2', r: [5, 445, 40, 541], h: [0, 1.8], f: 'E', kind: 'shelf', col: 0x3f9a9a,
     b: [0, 0.4, 0.8, 1.2, 1.55],
     it: [[0, '洗剤・柔軟剤のストック', 4, 'bottle', 0.2, 0.3, 0.12, [0x7fb0d0, 0xe6e6e0, 0xd0a0c0, 0x9fc47e]], [1, 'バスタオル', 3, 'towel', 0.32, 0.3, 0.3, [0xf2f0ea, 0xd8e4ea, 0xe8dcc8]],
       [2, 'フェイスタオル', 4, 'towel', 0.24, 0.22, 0.3, [0xf2f0ea, 0xd8e4ea]], [3, '洗濯ネット・ハンガー（かご）', 2, 'bk_misc', 0.35, 0.2, 0.3, 0xc8a878], [4, '掃除用品のストック', 2, 'cb', 0.35, 0.2, 0.3, CB]] },
@@ -586,12 +586,19 @@ function buildLeaf(u, FL1) {
 // ---- 設備・ベッド（家のモデルでは 'fixture' の箱。ビューアでは隠して、ここで形のある物を出す）----
 // [形, 階, x, y, 幅, 奥行, 高さ(cm), 向き(rad・プランシートと同じ), 追加]
 const FIX = [
-  ['washer', '2', 52.5, 412.5, 65, 65, 105, 4.712389], ['basin2', '2', 35.5, 315, 90, 55, 90, 4.712389],   // 木のカウンター（ツアー 11/27・幅は推測）
-  ['toilet', '2', 136, 48, 40, 80, 62, 0], ['bath', '2', 352.5, 97.5, 155, 85, 60, 1.5707964], ['shower', '2', 246, 91, 182, 128, 200, 4.712389],   // 洗い場（ツアー 11/27）
+  // 2階（11/27 の図面の位置）
+  ['washer', '2', 40, 407, 65, 65, 105, 4.712389],             // ランドリー
+  ['slop', '2', 112, 394, 45, 48, 90, 0],                      // スロップシンク（11/27）
+  ['basin2', '2', 31, 323, 60, 52, 90, 4.712389],              // 洗面所（木のカウンターはツアーから）
+  ['toilet', '2', 365, 227.5, 40, 80, 62, 1.5707964],          // トイレ(2)は浴室の南へ（11/27）
+  ['bath', '2', 352.5, 97.5, 155, 85, 60, 1.5707964],          // 浴槽
+  ['shower', '2', 246, 91, 182, 128, 200, 4.712389],           // 洗い場（ツアー 11/27）
   ['bed', '2', 832.5, 65, 100, 205, 45, 4.712389, { col: 0xb7c7dd }], ['bed', '2', 832.5, 170, 100, 205, 45, 4.712389, { col: 0xd8d2c4 }],
   ['bed', '2', 832.5, 275, 100, 205, 45, 4.712389, { col: 0x9fb5a0 }], ['bed', '2', 568.5, 65, 100, 205, 45, 4.712389, { col: 0xe8c9b8 }],
   ['bed', '2', 526, 527.5, 100, 205, 45, 0, { col: 0xc9c9d6 }],
-  ['toilet', '1', 48, 500, 40, 80, 62, 4.712389, { tankless: true }],   // 1階はタンクなし（ツアー 11/27） ['basin', '1', 33, 410, 60, 50, 85, 4.712389],   // 1階のトイレ・手洗い（今までモデルに無かった）
+  // 1階
+  ['toilet', '1', 48, 500, 40, 80, 62, 4.712389, { tankless: true }],   // タンクなし（ツアー 11/27）
+  ['basin', '1', 33, 410, 60, 50, 85, 4.712389],               // 手洗い
 ];
 function addFixtures(furn, FL1) {
   const fg = new THREE.Group(); fg.name = 'fixtures';
@@ -601,8 +608,36 @@ function addFixtures(furn, FL1) {
   }
   furn.add(fg);
 }
+// ---- 間接照明（11/27）：テレビのふかし壁の上と、キッチンのダウンシーリングのリビング側。夜に明るく ----
+function glowTex(dir) {   // 片側から光って、だんだん消える
+  const c = document.createElement('canvas'); c.width = 4; c.height = 128; const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, dir > 0 ? 128 : 0, 0, dir > 0 ? 0 : 128);
+  gr.addColorStop(0, 'rgba(255,214,150,1)'); gr.addColorStop(0.25, 'rgba(255,205,140,0.45)'); gr.addColorStop(1, 'rgba(255,200,130,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const coves = [];
+function addCoves(furn, FL1) {
+  const cg = new THREE.Group(); cg.name = 'coves';
+  const lineM = new THREE.MeshBasicMaterial({ color: 0xffe2b0 });
+  const mk = (w, h, tex, px, py, pz, ry, rx) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    m.position.set(px, py, pz); m.rotation.set(rx || 0, ry || 0, 0); m.userData.noAO = true; m.raycast = () => {}; cg.add(m); coves.push(m); return m;
+  };
+  // テレビのふかし壁（x 936〜948・高さ 2.4m）の上：元の壁（x 948）を下から照らす
+  const ty = (364 + 637) / 2, tl = (637 - 364) / 100;
+  const line = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.012, tl - 0.02), lineM); line.position.set(PX(947), FL1 + 2.406, PZ(ty)); line.raycast = () => {}; cg.add(line);
+  mk(tl, 1.3, glowTex(1), PX(947.8), FL1 + 2.4 + 0.65, PZ(ty), -Math.PI / 2);
+  // ダウンシーリング（高さ 2.25m・南の縁 y=270）：リビング側の天井（2.4m）を照らす
+  const kx = (318.5 + 865) / 2, kl = (865 - 318.5) / 100;
+  const line2 = new THREE.Mesh(new THREE.BoxGeometry(kl, 0.012, 0.02), lineM); line2.position.set(PX(kx), FL1 + 2.39, PZ(271)); line2.raycast = () => {}; cg.add(line2);
+  const pl = mk(kl, 0.7, glowTex(1), PX(kx), FL1 + 2.398, PZ(270 + 35), 0, Math.PI / 2);
+  furn.add(cg);
+  const upd = () => { const d = window._dbg, night = d && d.ext && d.ext.isNight && d.ext.isNight(); for (const m of coves) m.material.opacity = night ? 1 : 0.35; };
+  upd(); setInterval(upd, 1500);
+}
 export function addStorage(furn, FL1) {
-  addFixtures(furn, FL1);
+  addFixtures(furn, FL1); addCoves(furn, FL1);
   for (const u of UNITS) {
     byId[u.id] = u; u.labels = []; u.cur = [0, 0]; u.tgt = [0, 0]; u.n = 1;
     const [x0, y0, x1, y1] = u.r, [h0, h1] = u.h, ns = u.f === 'N' || u.f === 'S';

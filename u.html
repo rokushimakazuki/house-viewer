@@ -70,7 +70,7 @@
 <div id="ui">
   <button id="hide">隠す</button>
   <h1>11/20 プラン（上野さん案・打合せ後）</h1>
-  <p class="sub">11/20 の打合せ後のプランシートから作った3D。階段は和室の西（踏み板だけ・回り段）、リビングはハーフ吹抜け（天井3.9m）で、上の東寄りがロフト4.5帖。寸法は図面から読んだ近似です。Meta Quest 3 のブラウザで開くと、実物大で見られます。</p>
+  <p class="sub">11/20 の打合せ後のプランシートから作り、11/27 の変更（2階の水回り・和室の床 +24cm・テレビのふかし壁・冷蔵庫置き場など）を反映した3D。階段は和室の西（踏み板だけ・回り段）、リビングはハーフ吹抜け（天井3.9m）で、上の東寄りがロフト4.5帖。寸法は図面から読んだ近似です。Meta Quest 3 のブラウザで開くと、実物大で見られます。</p>
   <p class="sub" style="margin-top:-6px"><a href="madori_u.html" style="color:var(--accent);font-weight:600">平面図と3D</a></p>
   <p class="sub" style="margin-top:-6px"><a href="ar.html" style="color:var(--accent);font-weight:600">▶ iPhone・iPadでARで見る（「11/20 プラン」）</a></p>
 
@@ -801,7 +801,7 @@ renderer.setAnimationLoop((t, frame) => {
 });
 // ================= 中から見る（iPhone・パソコン） =================
 // p＝立つ位置（モデル座標 X,Z）、d＝最初に向く方向、pitch＝見上げる角度（度）、fl＝床の高さ
-const FLH = { '1': FL1, 'w': FL1 + 0.28, '2': FL1 + 3.00, 'g': 0 };
+const FLH = { '1': FL1, 'w': FL1 + 0.22, '2': FL1 + 3.00, 'g': 0 };
 const VPS = {
   sofa:    { name: 'リビング（ソファ）',             p: [2.062, 1.055], d: [1, 0],       pitch: 10,  fl: '1' },
   dining:  { name: 'ダイニングから階段と和室を見る', p: [0.422, -0.995], d: [-1.5, 1.5],  pitch: 8,   fl: '1' },
