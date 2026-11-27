@@ -441,7 +441,8 @@ gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.0, sc
 gtao.blendIntensity = 1.0;
 composer.addPass(gtao);
 composer.addPass(new OutputPass());
-let aoOn = !/iPhone|iPad|Android/.test(navigator.userAgent);
+// スマホ・タブレットは最初は切る（iPad の Safari は Mac と名乗るので、指で触れる Mac も iPad とみなす）
+let aoOn = !(/iPhone|iPad|Android/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
 $('#ao').checked = aoOn;
 $('#ao').onchange = () => { aoOn = $('#ao').checked; };
 

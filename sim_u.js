@@ -268,6 +268,7 @@ function build() {
     <div><select id="simsc" aria-label="シーン">${SCENES.map((x) => `<option value="${x.id}">${x.name}</option>`).join('')}</select><select id="simspd"><option value="10">10倍</option><option value="30">30倍</option><option value="60" selected>60倍</option><option value="120">120倍</option></select>
       <select id="simssn" aria-label="季節"><option value="12-22">冬至（12/22）</option><option value="3-20">春分（3/20）</option><option value="6-21">夏至（6/21）</option><option value="9-23">秋分（9/23）</option><option value="today">今日</option></select></div>
     <div class="sub" id="simlook" style="display:none"></div>
+    <div class="sub" id="simq" style="display:none;color:#ffcf9a"></div>
     <input type="range" id="simt" min="0" max="100" step="0.1" value="0">
     <div class="sub" style="display:flex;gap:6px;align-items:center"><label style="flex:none"><input type="checkbox" id="simsunon" checked> 日差し・暗さも合わせる</label><span id="simsun"></span></div>
     <div><button data-view="auto" class="on">自動</button><button data-view="1">上から1階</button><button data-view="2">上から2階</button><button data-view="in">中から</button><button data-view="eye">目線で歩く</button>
@@ -649,9 +650,34 @@ function drawInd() {
   }
   for (const o of put) { const tr = `translate(${o.x.toFixed(0)}px,${o.y.toFixed(0)}px) translate(-50%,-50%)`; if (o.c.style.transform !== tr) o.c.style.transform = tr; }
 }
+// ---- 重さ対策 ----
+// （影を毎コマ作り直すのを止めても、測ると速さは変わらなかった〔11/28、AO あり 26.5→27.1ms〕ので、影はそのまま）
+// 画質：再生中に 1コマ 45ms（毎秒 22コマ）より遅い状態が約1秒続いたら、陰影の仕上げ（AO）を切る → それでも遅ければ細かさを下げる。閉じたら元に戻す
+const Q = { avg: 0, slow: 0, pr: null, ao: false };
+function perfWatch(ms) {
+  if (ms > 400 || ms <= 0) return;   // 止めていた間・タブを切り替えた後は数えない
+  Q.avg = Q.avg ? Q.avg * 0.9 + ms * 0.1 : ms;
+  Q.slow = Q.avg > 45 ? Q.slow + 1 : 0;
+  if (Q.slow > 25) { Q.slow = 0; Q.avg = 0; lowerQuality(); }
+}
+function lowerQuality() {
+  const r = state.d.renderer, ao = document.getElementById('ao'), q = state.box.querySelector('#simq');
+  if (ao && ao.checked) { ao.checked = false; ao.dispatchEvent(new Event('change')); Q.ao = true; }
+  else if (r.getPixelRatio() > 1) { if (Q.pr === null) Q.pr = r.getPixelRatio(); r.setPixelRatio(Math.max(1, r.getPixelRatio() - 0.5)); }
+  else return;
+  q.style.display = ''; q.textContent = '動きが重いので、画質を少し下げています（閉じると元に戻ります）';
+}
+function restoreQuality() {
+  const r = state.d.renderer, ao = document.getElementById('ao');
+  if (Q.ao && ao) { ao.checked = true; ao.dispatchEvent(new Event('change')); }
+  if (Q.pr !== null) r.setPixelRatio(Q.pr);
+  Q.ao = false; Q.pr = null; Q.avg = 0; Q.slow = 0;
+  const q = state.box.querySelector('#simq'); q.style.display = 'none';
+}
 function loop() {
   if (!state || !state.play) return;
   const now = performance.now(), dt = (now - state.last) / 1000; state.last = now;
+  perfWatch(dt * 1000);
   let spd = +state.box.querySelector('#simspd').value;   // 1秒で何分進めるか（60倍＝1秒で1分）
   if (state.view === 'eye' && posAt(state.P, state.sel, state.t).walking) spd = 1;   // 目線で歩くときは、歩いている間だけ実際の速さ
   state.t += dt * spd / 60; const end = rng()[1];
@@ -669,7 +695,7 @@ function open() {
 }
 function close() {
   if (state.view === 'eye') { state.view = 'auto'; for (const b of state.box.querySelectorAll('[data-view]')) b.classList.toggle('on', b.dataset.view === 'auto'); }
-  eyeOff();
+  eyeOff(); restoreQuality();
   const ui = document.getElementById('ui'); if (ui && !state.d.inside.on) ui.style.display = state.uiDisp || '';
   state.play = false; sunRestore(); state.box.style.display = 'none'; state.root.visible = false; state.ind.style.display = 'none'; state.d.renderer.clippingPlanes = []; lastFloor = null; state.d.applySun && state.d.applySun(); inval();   // 日の当たる床の面積は閉じてから計算し直す
 }
@@ -682,4 +708,4 @@ function addButtons() {
   const b2 = document.createElement('button'); b2.textContent = '暮らしの動き'; b2.onclick = open; bar.parentNode.insertBefore(b2, bar);
 }
 addButtons();
-window._sim = { open, close, plan, analyze, SCEN, SCENES, PEOPLE, N, route, loadScene, darkStudy, isOpen: () => !!state && state.box.style.display !== 'none', playing: () => !!state && state.play && state.box.style.display !== 'none' };
+window._sim = { open, close, plan, analyze, SCEN, SCENES, PEOPLE, N, route, loadScene, darkStudy, perfWatch, isOpen: () => !!state && state.box.style.display !== 'none', playing: () => !!state && state.play && state.box.style.display !== 'none' };
