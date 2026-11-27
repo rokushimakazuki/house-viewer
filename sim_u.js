@@ -202,11 +202,16 @@ function figure(p) {
 
 // ---- 画面（下の板）----
 const css = `
-#simbox{position:fixed;left:10px;top:10px;z-index:52;width:min(380px,94vw);max-height:46vh;overflow:auto;overflow-wrap:anywhere;background:rgba(28,30,33,.94);color:#fff;border-radius:14px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.4);font-size:14px;line-height:1.45;display:none}
-#simbox.min .simbody{display:none}
+#simbox{position:fixed;left:8px;top:8px;z-index:60;width:min(360px,94vw);max-height:40vh;overflow:auto;-webkit-overflow-scrolling:touch;overflow-wrap:anywhere;background:rgba(28,30,33,.92);color:#fff;border-radius:14px;padding:6px 10px 8px;box-shadow:0 6px 20px rgba(0,0,0,.4);font-size:14px;line-height:1.45;display:none}
+#simbox.min{width:auto;max-height:none;overflow:visible}
+#simbox.min .simbody,#simbox.min .simttl{display:none}
+#simbox .simhead{display:flex;align-items:center;gap:4px}
+#simbox .simhead button{min-width:44px;min-height:40px;font-size:15px}
+#simbox button,#simbox select,#simbox summary{touch-action:manipulation;-webkit-tap-highlight-color:rgba(255,255,255,.2)}
 #simbox button,#simbox select{font:inherit;font-size:13px;border-radius:8px;border:1px solid #555;background:#2c3035;color:#fff;padding:5px 9px;margin:2px 2px}
+#simbox summary{cursor:pointer;padding:4px 0}
 #simbox button.on{background:#d85a10;border-color:#d85a10}
-#simbox .clock{font-size:26px;font-weight:700;letter-spacing:1px;white-space:nowrap;flex:none}
+#simbox .clock{font-size:22px;font-weight:700;letter-spacing:1px;white-space:nowrap;flex:none;min-width:3.2em}
 #simbox .who{display:flex;gap:6px;align-items:flex-start;padding:1px 0;cursor:pointer;font-size:13px}#simbox .who .sub{display:inline;margin-left:6px}#simbox .who > div{display:block}
 #simbox .who.sel{background:rgba(255,255,255,.08);border-radius:6px}
 #simbox .dot{width:12px;height:12px;border-radius:50%;margin-top:4px;flex:none}
@@ -220,15 +225,16 @@ function el(html) { const d = document.createElement('div'); d.innerHTML = html.
 function build() {
   const d = window._dbg; if (!d || !d.furn) return null;
   document.head.append(el(`<style>${css}</style>`));
-  const box = el(`<div id="simbox"><div style="display:flex;align-items:center;gap:6px"><b style="flex:1">暮らしの動き（平日）</b><button id="simmin">たたむ</button><button id="simx">✕</button></div>
+  // 上の1行（時計・再生・たたむ・閉じる）はたたんでも残す。たたむと、この1行だけの小さな板になる
+  const box = el(`<div id="simbox"><div class="simhead"><b class="simttl" style="font-size:13px">暮らしの動き</b><span class="clock" id="simclk">6:00</span>
+    <button id="simplay" aria-label="再生">▶</button><span style="flex:1"></span><button id="simmin">たたむ</button><button id="simx" aria-label="閉じる">✕</button></div>
   <div class="simbody">
-    <div><select id="simsc"><option value="am">${SCEN.am.name}</option><option value="pm">${SCEN.pm.name}</option></select>
-      <button id="simplay">▶ 再生</button><select id="simspd"><option value="30">30倍</option><option value="60" selected>60倍</option><option value="120">120倍</option></select></div>
-    <div style="display:flex;align-items:center;gap:10px"><span class="clock" id="simclk">6:00</span><input type="range" id="simt" min="0" max="100" step="0.1" value="0"></div>
-    <div><span class="sub">見る：</span><button data-view="auto" class="on">自動</button><button data-view="1">上から1階</button><button data-view="2">上から2階</button><button data-view="in">中から</button>
+    <div><select id="simsc"><option value="am">${SCEN.am.name}</option><option value="pm">${SCEN.pm.name}</option></select><select id="simspd"><option value="30">30倍</option><option value="60" selected>60倍</option><option value="120">120倍</option></select></div>
+    <input type="range" id="simt" min="0" max="100" step="0.1" value="0">
+    <div><button data-view="auto" class="on">自動</button><button data-view="1">上から1階</button><button data-view="2">上から2階</button><button data-view="in">中から</button>
       <label class="sub"><input type="checkbox" id="simtrail" checked> 歩いた道</label></div>
-    <div class="sub">名前をタップすると、その人を追いかけて名札を出します。</div><div id="simwho"></div>
-    <details id="simres" style="margin-top:6px"><summary><b>結果（歩いた距離・混み合い）</b></summary><div id="simresb"></div><div class="sub" id="simguess" style="margin-top:6px"></div></details>
+    <details id="simppl" open><summary><b>家族</b> <span class="sub">名前をタップ＝その人を追いかける</span></summary><div id="simwho"></div></details>
+    <details id="simres"><summary><b>結果（歩いた距離・混み合い）</b></summary><div id="simresb"></div><div class="sub" id="simguess" style="margin-top:6px"></div></details>
   </div></div>`);
   document.body.append(box);
   const root = new THREE.Group(); root.name = 'sim'; d.furn.add(root);
@@ -238,15 +244,33 @@ function build() {
   const trails = new THREE.Group(); root.add(trails);
   state = { d, box, root, figs, labels, trails, sc: 'am', t: 0, play: false, view: 'auto', sel: 'mama', last: 0, FL1, P: null, res: null };
   const $ = (q) => box.querySelector(q);
-  $('#simx').onclick = () => close();
-  $('#simmin').onclick = () => { box.classList.toggle('min'); $('#simmin').textContent = box.classList.contains('min') ? 'ひらく' : 'たたむ'; };
+  // 板の上の操作が、下の 3D（指で回す・タップで色選び）に伝わらないようにする
+  for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'wheel']) box.addEventListener(ev, (e) => e.stopPropagation());
+  tap($('#simx'), () => close());
+  tap($('#simmin'), () => fold(!box.classList.contains('min')));
   $('#simsc').onchange = () => load($('#simsc').value);
-  $('#simplay').onclick = () => { state.play = !state.play; if (state.play && state.t >= tmin(SCEN[state.sc].t1)) state.t = tmin(SCEN[state.sc].t0); $('#simplay').textContent = state.play ? '⏸ 止める' : '▶ 再生'; state.last = performance.now(); loop(); };
+  tap($('#simplay'), () => { state.play = !state.play; if (state.play && state.t >= tmin(SCEN[state.sc].t1)) state.t = tmin(SCEN[state.sc].t0); setPlayBtn(); state.last = performance.now(); loop(); });
+  tap($('#simwho'), (e) => { const x = e.target.closest && e.target.closest('.who'); if (!x) return; state.sel = x.dataset.id; applyView(true); update(); });
   $('#simt').oninput = () => { const S = SCEN[state.sc]; state.t = tmin(S.t0) + (tmin(S.t1) - tmin(S.t0)) * $('#simt').value / 100; update(); };
   $('#simtrail').onchange = () => { trails.visible = $('#simtrail').checked; inval(); };
-  for (const b of box.querySelectorAll('[data-view]')) b.onclick = () => { state.view = b.dataset.view; for (const x of box.querySelectorAll('[data-view]')) x.classList.toggle('on', x === b); applyView(true); update(); };
+  for (const b of box.querySelectorAll('[data-view]')) tap(b, () => { state.view = b.dataset.view; for (const x of box.querySelectorAll('[data-view]')) x.classList.toggle('on', x === b); applyView(true); update(); });
   return state;
 }
+// タップ：指を離した時点で動かす（iPad では、時計が毎コマ書き換わっていると click が届かないことがあるため）。
+// 板をスクロールしただけのときは pointercancel になり、動かない。キーボード操作の click も受ける
+function tap(elm, fn) {
+  let id = null, x0 = 0, y0 = 0, done = 0;
+  elm.addEventListener('pointerdown', (e) => { id = e.pointerId; x0 = e.clientX; y0 = e.clientY; });
+  elm.addEventListener('pointercancel', () => { id = null; });
+  elm.addEventListener('pointerup', (e) => {
+    if (e.pointerId !== id) return; id = null;
+    if (Math.hypot(e.clientX - x0, e.clientY - y0) > 12) return;
+    done = performance.now(); fn(e);
+  });
+  elm.addEventListener('click', (e) => { if (performance.now() - done < 700) return; fn(e); });   // 指で押したときは pointerup で済んでいる
+}
+function setPlayBtn() { const b = state.box.querySelector('#simplay'); b.textContent = state.play ? '⏸' : '▶'; b.setAttribute('aria-label', state.play ? '止める' : '再生'); b.classList.toggle('on', state.play); }
+function fold(min) { const b = state.box; b.classList.toggle('min', min); b.querySelector('#simmin').textContent = min ? 'ひらく' : 'たたむ'; }
 function inval() { const d = state.d; d.ext && d.ext.invalidate && d.ext.invalidate(); }
 function load(sc) {
   state.sc = sc; const S = SCEN[sc]; state.P = plan(sc); state.res = analyze(sc, state.P); state.t = tmin(S.t0);
@@ -295,8 +319,7 @@ function update() {
     const where = N[q.walking ? q.on[1] : (q.seg.node === 'mom' ? 'kitchen' : q.seg.node)];
     wh += `<div class="who${state.sel === p.id ? ' sel' : ''}" data-id="${p.id}"><span class="dot" style="background:#${p.col.toString(16).padStart(6, '0')}"></span><div><b>${p.name}</b>　${q.carried ? 'ママに抱っこ' : act}<div class="sub">${q.carried ? '' : (q.walking ? '移動中' : where[3])}</div></div></div>`;
   }
-  const w = box.querySelector('#simwho'); w.innerHTML = wh;
-  for (const x of w.querySelectorAll('.who')) x.onclick = () => { state.sel = x.dataset.id; applyView(true); update(); };
+  const w = box.querySelector('#simwho'); if (w.dataset.h !== wh) { w.innerHTML = wh; w.dataset.h = wh; }   // 変わったときだけ書き換える（指の下の名前が消えないように）
   inval();
 }
 // 見る方向：上から見るときは、その階の天井より上を切って見せる
@@ -317,8 +340,9 @@ function applyView(force) {
   const cut = d.furn.localToWorld(new THREE.Vector3(0, base + 2.1, 0)).y;
   d.renderer.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, -1, 0), cut)];
   if (d.orbit) {   // 縦長の画面（スマホ）は少し引いて、上の操作板に隠れないよう家を下に寄せる
-    const asp = innerWidth / innerHeight, k = Math.max(1, 1.3 / asp), sh = asp < 1 ? 6 : 0;
-    d.camera.position.set(c.x, c.y + 10 * k, c.z + 5 * k - sh); d.orbit.target.set(c.x, c.y, c.z - sh); d.orbit.update();
+    // 横長の画面（iPad 横・パソコン）は、左上の板をよけて家を右へ寄せる
+    const asp = innerWidth / innerHeight, k = Math.max(1, 1.3 / asp), sh = asp < 1 ? 6 : 0, sx = asp >= 1 ? 2.2 : 0;
+    d.camera.position.set(c.x - sx, c.y + 10 * k, c.z + 5 * k - sh); d.orbit.target.set(c.x - sx, c.y, c.z - sh); d.orbit.update();
   }
   inval();
 }
@@ -327,7 +351,7 @@ function loop() {
   const now = performance.now(), dt = (now - state.last) / 1000; state.last = now;
   const spd = +state.box.querySelector('#simspd').value;   // 1秒で何分進めるか（60倍＝1秒で1分）
   state.t += dt * spd / 60; const end = tmin(SCEN[state.sc].t1);
-  if (state.t >= end) { state.t = end; state.play = false; state.box.querySelector('#simplay').textContent = '▶ 再生'; state.box.querySelector('#simres').open = true; }
+  if (state.t >= end) { state.t = end; state.play = false; setPlayBtn(); if (!state.box.classList.contains('min')) state.box.querySelector('#simres').open = true; }
   update();
   requestAnimationFrame(loop);
 }
@@ -335,6 +359,7 @@ function open() {
   if (!state && !build()) return;
   state.box.style.display = 'block'; state.root.visible = true;
   const ui = document.getElementById('ui'); if (ui) { state.uiDisp = ui.style.display; ui.style.display = 'none'; }   // スマホで重ならないように、説明の板は隠す
+  window._design && window._design.closePop && window._design.closePop(); window._store && window._store.closePop && window._store.closePop();   // 下に出ている色選び・収納の板は閉じる
   if (!state.P) load('am'); else applyView(true);
 }
 function close() {
@@ -350,4 +375,4 @@ function addButtons() {
   const b2 = document.createElement('button'); b2.textContent = '暮らしの動き'; b2.onclick = open; bar.parentNode.insertBefore(b2, bar);
 }
 addButtons();
-window._sim = { open, close, plan, analyze, SCEN, PEOPLE, N, route };
+window._sim = { open, close, plan, analyze, SCEN, PEOPLE, N, route, isOpen: () => !!state && state.box.style.display !== 'none' };

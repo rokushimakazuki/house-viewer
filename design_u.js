@@ -611,7 +611,9 @@ function pick(cx, cy) {
     const up = (e) => {
       touches = Math.max(0, touches - 1);
       if (!t0 || e.type !== 'pointerup' || performance.now() - t0.t > 400) { t0 = null; return; }
-      const hit = pick(e.clientX, e.clientY); t0 = null;
+      t0 = null;
+      if (window._sim && window._sim.isOpen && window._sim.isOpen()) return;   // 暮らしの動きを見ている間は、色選び・収納の板を出さない
+      const hit = pick(e.clientX, e.clientY);
       const st = window._store;
       if (hit && hit.store) { closePop(); st && st.tap(hit.store); return; }
       st && st.closePop();
@@ -621,4 +623,4 @@ function pick(cx, cy) {
   }, 300);
 }
 setDesign(current);   // 最初の適用（壁の面の一覧なども宣言し終えてから）
-window._design = { setDesign, setTop, setOverride, setPart, PATTERNS, CHOICES, pick, PARTS: () => PARTS };
+window._design = { setDesign, setTop, setOverride, setPart, PATTERNS, CHOICES, pick, closePop, PARTS: () => PARTS };
