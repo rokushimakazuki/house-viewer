@@ -977,9 +977,9 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 renderer.domElement.addEventListener('pointermove', (e) => {
   if (!inside.on) return;
   if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (ptrs.size >= 2 && pinch != null) {   // 2本指でなぞる：上へ＝見ている方向へ進む（上を見ていれば上がる）、下へ＝下がる、左右＝横に動く（11/27）
+  if (ptrs.size >= 2 && pinch != null) {   // 2本指：広げる＝見ている方向へ進む（上を見ていれば上がる）、近づける＝下がる、そろえて左右＝横に動く（11/27）
     const t = two();
-    fly(-(t.y - pinch.y) * 0.012);   // 指を100px 上へ＝約1.2m 進む
+    fly((t.d - pinch.d) * 0.012);    // 100px 広げると約1.2m 進む
     strafe(-(t.x - pinch.x) * 0.01); // 指を右へ＝左へずれる（景色をつかんで動かす向き）
     pinch = t; return;
   }
