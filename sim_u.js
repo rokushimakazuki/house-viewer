@@ -259,7 +259,7 @@ function build() {
   tap($('#simx'), () => close());
   tap($('#simmin'), () => fold(!box.classList.contains('min')));
   $('#simsc').onchange = () => load($('#simsc').value);
-  tap($('#simplay'), () => { state.play = !state.play; if (state.play && state.t >= tmin(SCEN[state.sc].t1)) state.t = tmin(SCEN[state.sc].t0); setPlayBtn(); state.last = performance.now(); loop(); });
+  tap($('#simplay'), () => { state.play = !state.play; if (!state.play) sunSync(true); if (state.play && state.t >= tmin(SCEN[state.sc].t1)) state.t = tmin(SCEN[state.sc].t0); setPlayBtn(); state.last = performance.now(); loop(); });
   tap($('#simwho'), (e) => { const x = e.target.closest && e.target.closest('.who'); if (!x) return; state.sel = x.dataset.id; applyView(true); update(); });
   $('#simt').oninput = () => { const S = SCEN[state.sc]; state.t = tmin(S.t0) + (tmin(S.t1) - tmin(S.t0)) * $('#simt').value / 100; update(); };
   $('#simtrail').onchange = () => { trails.visible = $('#simtrail').checked; inval(); };
@@ -400,14 +400,27 @@ function indLoop() {
   if (!state || state.box.style.display === 'none') { if (state) state.indRun = false; return; }
   drawInd(); requestAnimationFrame(indLoop);
 }
+let indSig = '', indLay = null, indLayT = 0;
 function drawInd() {
   const d = state.d, cam = d.camera, ind = state.ind;
-  if (d.renderer.xr && d.renderer.xr.isPresenting) { ind.style.display = 'none'; return; }
-  ind.style.display = 'block';
+  if (d.renderer.xr && d.renderer.xr.isPresenting) { ind.style.display = 'none'; indSig = ''; return; }
+  if (ind.style.display !== 'block') ind.style.display = 'block';
   const W = innerWidth, H = innerHeight, top = state.view !== 'in';
-  cam.updateMatrixWorld(); d.furn.updateMatrixWorld();
-  const box = state.box.getBoundingClientRect();
-  const bar = document.getElementById('bar'), br = bar && getComputedStyle(bar).display !== 'none' ? bar.getBoundingClientRect() : null;
+  cam.updateMatrixWorld();
+  // 板の位置・大きさは 0.3 秒ごとに測る（毎コマ測ると iPad で重い）
+  const now = performance.now();
+  if (!indLay || now - indLayT > 300) {
+    const bar = document.getElementById('bar');
+    indLay = { box: state.box.getBoundingClientRect(), br: bar && bar.style.display !== 'none' && document.body.classList.contains('inside') ? bar.getBoundingClientRect() : null };
+    indLayT = now;
+  }
+  // 時刻・カメラ・画面・板が前のコマと同じなら何もしない（止めて見ているときは軽く）
+  const e = cam.matrixWorld.elements, b0 = indLay.box, b1 = indLay.br;
+  const sig = state.t.toFixed(2) + state.view + state.floor + W + 'x' + H + e[0].toFixed(4) + e[2].toFixed(4) + e[8].toFixed(4) + e[9].toFixed(4) + e[12].toFixed(3) + e[13].toFixed(3) + e[14].toFixed(3) + cam.fov + b0.right + b0.bottom + (b1 ? b1.top : 0);
+  if (sig === indSig) return;
+  indSig = sig;
+  d.furn.updateMatrixWorld();
+  const box = indLay.box, br = indLay.br;
   const yMax = (br && br.height > 0 && br.top > H * 0.3 ? br.top : H) - 16;   // 中から見るときの下の操作の上まで
   const A = { l: 60, r: W - 60, t: 16, b: yMax }, cx = (A.l + A.r) / 2, cy = (A.t + A.b) / 2;
   const babyHeld = state.P && posAt(state.P, 'baby', state.t).carried, put = [];
@@ -436,7 +449,7 @@ function drawInd() {
     const nm = p.name.replace(/（.*/, '') + (p.id === 'mama' && babyHeld ? '・赤ちゃん' : '');
     const tg = (fl && !room.startsWith(fl) ? fl + ' ' : '') + (q.walking ? '→' : '') + room;
     const key = nm + '|' + tg;
-    if (c.dataset.k !== key) { c.querySelector('.nm').textContent = nm; c.querySelector('.tg').textContent = tg; c.dataset.k = key; }
+    if (c.dataset.k !== key) { c.querySelector('.nm').textContent = nm; c.querySelector('.tg').textContent = tg; c.dataset.k = key; c._w = 0; }
     let ang = null;   // 矢印の向き（画面の端に出すとき）
     if (!inView || underBox) {
       // 画面の中心から目標への方向に、端まで寄せる（後ろ側は向きを反転）
@@ -452,11 +465,11 @@ function drawInd() {
     if (x >= box.left - 50 && x <= box.right + 50 && y >= box.top - 14 && y <= box.bottom + 14) {
       if (box.right + 60 < W - 60 && (box.right - x < box.bottom - y || box.bottom + 20 > yMax)) x = box.right + 60; else y = box.bottom + 16;
     }
-    c.classList.toggle('pin', ang === null);
-    const ar = c.querySelector('.ar');
-    if (ang === null) { ar.style.display = 'none'; } else { ar.style.display = ''; ar.style.transform = `rotate(${(ang * 180 / Math.PI + 90).toFixed(0)}deg)`; }
-    c.style.display = 'flex';
-    put.push({ c, x, y, w: c.offsetWidth + 4, h: c.offsetHeight + 3 });
+    const ar = c.querySelector('.ar'), rot = ang === null ? 'none' : `rotate(${(ang * 180 / Math.PI + 90).toFixed(0)}deg)`;
+    if (c._rot !== rot) { c._rot = rot; c.classList.toggle('pin', ang === null); ar.style.display = ang === null ? 'none' : ''; if (ang !== null) ar.style.transform = rot; }
+    if (c.style.display !== 'flex') c.style.display = 'flex';
+    if (!c._w) { c._w = c.offsetWidth + 4; c._h = c.offsetHeight + 3; }   // 文字が変わったときだけ測る
+    put.push({ c, x, y, w: c._w, h: c._h });
   }
   // 札どうしが重なるときは、下へずらす（同じ部屋に何人もいるとき）
   // 画面の上半分にある札は下へ、下半分にある札は上へずらす（端からはみ出さないように）
@@ -467,14 +480,14 @@ function drawInd() {
       if (Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.y - b.y) < (a.h + b.h) / 2) { b.y = a.y + (up ? -1 : 1) * (a.h + b.h) / 2; j = -1; }
     }
   }
-  for (const o of put) o.c.style.transform = `translate(${o.x.toFixed(0)}px,${o.y.toFixed(0)}px) translate(-50%,-50%)`;
+  for (const o of put) { const tr = `translate(${o.x.toFixed(0)}px,${o.y.toFixed(0)}px) translate(-50%,-50%)`; if (o.c.style.transform !== tr) o.c.style.transform = tr; }
 }
 function loop() {
   if (!state || !state.play) return;
   const now = performance.now(), dt = (now - state.last) / 1000; state.last = now;
   const spd = +state.box.querySelector('#simspd').value;   // 1秒で何分進めるか（60倍＝1秒で1分）
   state.t += dt * spd / 60; const end = tmin(SCEN[state.sc].t1);
-  if (state.t >= end) { state.t = end; state.play = false; setPlayBtn(); if (!state.box.classList.contains('min')) state.box.querySelector('#simres').open = true; }
+  if (state.t >= end) { state.t = end; state.play = false; setPlayBtn(); setTimeout(() => sunSync(true), 0); if (!state.box.classList.contains('min')) state.box.querySelector('#simres').open = true; }
   update();
   requestAnimationFrame(loop);
 }
@@ -488,7 +501,7 @@ function open() {
 }
 function close() {
   const ui = document.getElementById('ui'); if (ui && !state.d.inside.on) ui.style.display = state.uiDisp || '';
-  state.play = false; sunRestore(); state.box.style.display = 'none'; state.root.visible = false; state.ind.style.display = 'none'; state.d.renderer.clippingPlanes = []; lastFloor = null; inval();
+  state.play = false; sunRestore(); state.box.style.display = 'none'; state.root.visible = false; state.ind.style.display = 'none'; state.d.renderer.clippingPlanes = []; lastFloor = null; state.d.applySun && state.d.applySun(); inval();   // 日の当たる床の面積は閉じてから計算し直す
 }
 // ボタンを置く（外から見るときの左の板と、中から見るときの下の操作）
 function addButtons() {
@@ -499,4 +512,4 @@ function addButtons() {
   const b2 = document.createElement('button'); b2.textContent = '暮らしの動き'; b2.onclick = open; bar.parentNode.insertBefore(b2, bar);
 }
 addButtons();
-window._sim = { open, close, plan, analyze, SCEN, PEOPLE, N, route, isOpen: () => !!state && state.box.style.display !== 'none' };
+window._sim = { open, close, plan, analyze, SCEN, PEOPLE, N, route, isOpen: () => !!state && state.box.style.display !== 'none', playing: () => !!state && state.play && state.box.style.display !== 'none' };

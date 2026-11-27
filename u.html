@@ -387,6 +387,7 @@ function scheduleSunArea() {
   sunAreaTimer = setTimeout(() => {
     if (!ext || renderer.xr.isPresenting) return;
     const el = document.querySelectorAll('.sunarea');
+    if (window._sim && window._sim.isOpen && window._sim.isOpen()) { el.forEach((e) => { e.textContent = ''; }); return; }   // 暮らしの動きを開いている間は計算しない（1回 0.4 秒ほどかかり、時刻を動かすたびに走って重くなるため。閉じたときに計算する）
     if (ext.isNight() || sunState.alt <= 0.01) { el.forEach((e) => { e.textContent = ''; }); return; }
     const k = curKey(); if (!models[k]) return;
     const a = ext.sunArea(k, sunModelDir);
