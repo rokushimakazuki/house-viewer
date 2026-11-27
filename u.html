@@ -847,7 +847,11 @@ async function updateSee() {
   }
   el.innerHTML = '<b>ここから見えるリビング</b>（床／座った人の顔・11/20 プラン' + ($('#curt').checked ? '・カーテン閉' : '') + '）<br>リビングの窓 ' + rows.join('　');
 }
-function label() { $('#vpname').textContent = VPS[inside.vp].name + '・' + (seated() ? '座った目線' : '立った目線') + '・11/20 プラン・リビング窓' + (state.h / 10).toFixed(1) + 'm'; }
+function label() {
+  const dh = camera.position.y - eyeY();   // 2本指で上下に動かした分
+  const hs = Math.abs(dh) < 0.05 ? (seated() ? '座った目線' : '立った目線') : '目の高さ 床から' + (camera.position.y - vpFloor(VPS[inside.vp])).toFixed(1) + 'm';
+  $('#vpname').textContent = VPS[inside.vp].name + '・' + hs + '・11/20 プラン・リビング窓' + (state.h / 10).toFixed(1) + 'm';
+}
 // 比較画像の立ち位置
 const SHEET_VPS = ['sofa', 'dining', 'garden', 'nbr_g', 'nbr_2f', 'road_w'];
 for (const k of SHEET_VPS) { const o = document.createElement('option'); o.value = k; o.textContent = VPS[k].name + (VPS[k].out ? '' : '（座った目線）'); $('#sheetvp').append(o); }
@@ -949,17 +953,32 @@ $('#pose').onclick = () => {
 
 // 画面をなぞって見回す
 let drag = null;
-const ptrs = new Map(); let pinch = null;   // 画面に触れている指と、二本指の間の距離
+const ptrs = new Map(); let pinch = null;   // 画面に触れている指と、二本指の間の距離・真ん中の位置
 const pdist = () => { const [a, b] = [...ptrs.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+const pmid = () => { const [a, b] = [...ptrs.values()]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
+const two = () => ({ d: pdist(), ...pmid() });
+// 上下・左右に動く（2本指でなぞる）。高さは地面の少し下から屋根の上まで
+function rise(dy) { camera.position.y = THREE.MathUtils.clamp(camera.position.y + dy, -0.5, 9); label(); }
+function strafe(dx) {
+  const f = new THREE.Vector3(); camera.getWorldDirection(f); f.y = 0;
+  if (f.lengthSq() < 1e-6) return; f.normalize();
+  camera.position.addScaledVector(new THREE.Vector3(-f.z, 0, f.x), dx);
+}
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (!inside.on) return;
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); renderer.domElement.setPointerCapture(e.pointerId);
-  if (ptrs.size === 2) { pinch = pdist(); drag = null; } else if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY };
+  if (ptrs.size === 2) { pinch = two(); drag = null; } else if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY };
 });
 renderer.domElement.addEventListener('pointermove', (e) => {
   if (!inside.on) return;
   if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (ptrs.size >= 2 && pinch != null) { const dd = pdist(); walk((dd - pinch) * 0.012); pinch = dd; return; }   // 100px 広げると約1.2m 進む
+  if (ptrs.size >= 2 && pinch != null) {   // 2本指：広げる＝進む、そろえて上下＝上がる・下がる、左右＝横に動く
+    const t = two();
+    walk((t.d - pinch.d) * 0.012);   // 100px 広げると約1.2m 進む
+    rise(-(t.y - pinch.y) * 0.01);   // 指を100px 上へ＝1m 上がる
+    strafe(-(t.x - pinch.x) * 0.01); // 指を右へ＝左へずれる（景色をつかんで動かす向き）
+    pinch = t; return;
+  }
   if (!drag) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag = { x: e.clientX, y: e.clientY };
   if (inside.gyro) { inside.gyroOffset += dx * 0.004; return; }
@@ -968,11 +987,11 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 const endDrag = (e) => {
   ptrs.delete(e.pointerId);
   if (ptrs.size < 2) pinch = null;
-  if (ptrs.size === 1) { const [q] = ptrs.values(); drag = { x: q.x, y: q.y }; } else drag = null;   // 1本残ったら見回しに戻る
+  if (ptrs.size === 1) { const [q] = ptrs.values(); drag = { x: q.x, y: q.y }; } else if (ptrs.size === 2) pinch = two(); else drag = null;   // 1本残ったら見回しに戻る
 };
 renderer.domElement.addEventListener('pointerup', endDrag);
 renderer.domElement.addEventListener('pointercancel', endDrag);
-renderer.domElement.addEventListener('wheel', (e) => { if (inside.on) { e.preventDefault(); walk(-Math.sign(e.deltaY) * 0.3); } }, { passive: false });
+renderer.domElement.addEventListener('wheel', (e) => { if (inside.on) { e.preventDefault(); if (e.shiftKey) rise(-Math.sign(e.deltaY || e.deltaX) * 0.2); else walk(-Math.sign(e.deltaY) * 0.3); } }, { passive: false });   // Shift＋ホイール＝上下
 
 // ▲▼ 押している間だけ進む／下がる
 for (const [id, dir] of [['#fw', 1], ['#bw', -1]]) {

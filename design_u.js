@@ -377,7 +377,7 @@ function topSelect() {
   if (note) {
     const s = topSelect(); s.style.marginTop = '6px'; note.after(s);
     const hint = document.createElement('p'); hint.className = 'sub'; hint.style.margin = '6px 0 0';
-    hint.textContent = '「中から見る」で、変えたい所（壁・天井・床・木の部分・キッチン・テーブル・椅子・ラグ・畳など）を軽くタップすると、色や素材を選べます。二本指で広げる／縮めると前後に進みます。';
+    hint.textContent = '「中から見る」で、変えたい所（壁・天井・床・木の部分・キッチン・テーブル・椅子・ラグ・畳など）を軽くタップすると、色や素材を選べます。二本指で広げる／縮めると前後に、二本指をそろえて上下になぞると上がる・下がる、左右になぞると横に動きます。';
     s.after(hint);
   }
   const ds = document.querySelector('#designsel');
