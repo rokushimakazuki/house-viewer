@@ -36,6 +36,11 @@
   #bar.min > :not(#barmin) { display:none !important; }
   #bar.min #barmin { border-radius:10px; border-bottom:1px solid var(--line); padding:8px 14px; font-size:14px; }
   body.barmin #vpname { display:none !important; }
+  /* 上下に動くボタン（押している間だけ動く・11/27） */
+  #updn { position:fixed; right:12px; top:22%; z-index:40; display:none; flex-direction:column; gap:10px; }
+  body.inside #updn { display:flex; }
+  #updn button { width:52px; height:52px; padding:0; border-radius:50%; border:1px solid var(--line); background:var(--card); backdrop-filter:blur(6px); color:var(--fg, #fff); font-size:13px; line-height:1.1; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+  #updn button:active { background:var(--accent); }
   #bar .sunrow { flex:1; min-width:0; }
   #bar .sunrow select { flex:0 0 auto; }
   #bar button { padding:9px 11px; font-size:14px; }
@@ -171,6 +176,7 @@
 </div>
 <button id="show">操作パネル</button>
 <div id="vpname"></div>
+<div id="updn"><button id="upb" title="押している間 上へ">▲<br>上へ</button><button id="dnb" title="押している間 下へ">▼<br>下へ</button></div>
 <div id="bar">
   <button id="barmin" title="操作をたたむ">▼ たたむ</button>
   <div class="row">
@@ -998,6 +1004,13 @@ renderer.domElement.addEventListener('pointercancel', endDrag);
 renderer.domElement.addEventListener('wheel', (e) => { if (inside.on) { e.preventDefault(); if (e.shiftKey) rise(-Math.sign(e.deltaY || e.deltaX) * 0.2); else fly(-Math.sign(e.deltaY) * 0.3); } }, { passive: false });   // Shift＋ホイール＝上下
 
 // ▲▼ 押している間だけ進む／下がる
+// 上へ／下へ：押している間だけ上下に動く（11/27）
+for (const [id, dir] of [['#upb', 1], ['#dnb', -1]]) {
+  const b = $(id);
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); inside.lift = dir; });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => { inside.lift = 0; });
+  b.addEventListener('contextmenu', (e) => e.preventDefault());
+}
 for (const [id, dir] of [['#fw', 1], ['#bw', -1]]) {
   const b = $(id);
   b.addEventListener('pointerdown', (e) => { e.preventDefault(); inside.move = dir; });
@@ -1045,6 +1058,7 @@ $('#gyro').onclick = async () => {
 
 function updateInside(dt) {
   if (inside.move) walk(inside.move * 1.0 * dt);
+  if (inside.lift) rise(inside.lift * 0.8 * dt);   // 1秒で約0.8m
   if (inside.gyro && deviceQuat(devQ)) {
     yawQ.setFromAxisAngle(UP, inside.gyroOffset);
     camera.quaternion.copy(yawQ).multiply(devQ);
