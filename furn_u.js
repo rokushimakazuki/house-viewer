@@ -189,6 +189,7 @@ export function addSimpleFurniture(furn, FL1) {
   put(table(), 501.5, 212.5, 0);
   for (const x of [441.5, 501.5, 561.5]) { put(chair(), x, 150, 0); put(chair(), x, 275, Math.PI); }
   addKitchenDetails(furn, FL1);
+  addStorage(furn, FL1);
 }
 
 // ---- テレビの大きさを切り替える（11/26）。モデルのテレビ（材料名 tv、55インチで作ってある）を、中心を変えずに拡大・縮小する ----
@@ -317,3 +318,85 @@ setInterval(() => {
 }, 100);
 drawScreen(0);
 window._tv.setTVOn = setTVOn; window._tv.drawScreen = drawScreen;
+
+// ---- 収納の中身（11/27 六嶋さんと決めた配置）。半透明の箱と名札で表す。「収納の中身」ボタンで出し入れ ----
+// 位置は平面図の cm（原点＝建物の北西の角）、高さは m。lv：'1'＝1階の床、'2'＝2階の床（+3.00）、'L'＝ロフトの床（+4.05）、'G'＝地面（−0.59）
+const LV = { '1': 0, '2': 3.0, 'L': 4.05, 'G': -0.59 };
+const STORE = [
+  // 1階 シューズクローク
+  ['1', 288, 10, 316, 220, 0, 2.0, 0x4f7fb0, '靴 約30足＋子どもの靴・長靴（棚7段・約45足分）'],
+  ['1', 190, 20, 260, 120, 0, 1.0, 0x4f7fb0, 'ベビーカー・キャンプ用カート'],
+  ['1', 190, 130, 260, 220, 0, 0.9, 0x4f7fb0, 'ボール・外遊びのおもちゃ・傘'],
+  // 1階 収納(2)・収納(1)
+  ['1', 4, 550, 132, 633, 0, 2.0, 0x6b8f5e, '日用品ストック・掃除機・救急箱・充電器'],
+  ['1', 231, 550, 315, 633, 0, 1.3, 0x6b8f5e, '来客用マットレス1〜2枚・布団（階段下）'],
+  // 書斎
+  ['1', 10, 760, 130, 815, 0, 0.72, 0x8a6aa8, '机（新しく買う）'],
+  ['1', 10, 643, 100, 678, 0, 1.8, 0x8a6aa8, '書類ファイル（棚）'],
+  ['1', 185, 650, 220, 780, 0, 1.25, 0x8a6aa8, 'トレーニングベンチ（立てて）・ダンベル'],
+  // キッチン
+  ['1', 605, 10, 854, 58, 0.9, 1.3, 0xc07a3a, 'レンジ・炊飯器・トースター・電気ケトル（カップボードの上）'],
+  ['1', 605, 10, 854, 58, 0.08, 0.85, 0xc07a3a, '食器・保存容器・子どもの食器（今の吊戸棚の中身）'],
+  ['1', 868, 10, 951, 56, 0, 2.0, 0xc07a3a, 'ホームベーカリー・ホットプレート・グリル鍋・食品ストック（可動棚）'],
+  // 和室（遊び場）
+  ['1', 325, 460, 365, 545, 0.3, 1.1, 0xd0a030, 'おもちゃ棚・絵本ラック'],
+  ['1', 325, 380, 365, 455, 0.3, 1.2, 0xd0a030, 'おままごとキッチン'],
+  ['1', 440, 450, 580, 620, 0.3, 1.5, 0xd0a030, 'すべり台・ブランコ（折りたたみ）'],
+  ['1', 380, 590, 440, 630, 0.3, 0.5, 0xd0a030, '折りたたみマット'],
+  // 2階 WIC
+  ['2', 8, 762, 265, 815, 0.85, 1.75, 0xb05a6a, '掛ける服（家族全員・約2.5m）※ぎりぎり'],
+  ['2', 8, 762, 265, 815, 0, 0.8, 0xb05a6a, '引き出しケース 約8段'],
+  ['2', 70, 643, 265, 688, 0, 1.8, 0xb05a6a, 'バッグ・帽子・小物（棚）'],
+  // 2階 ランドリー・子ども部屋
+  ['2', 5, 520, 40, 632, 0, 1.8, 0x3f9a9a, 'タオル・洗剤ストック・洗濯ネット'],
+  ['2', 420, 210, 560, 268, 0, 1.3, 0x3f9a9a, '子どもの服（引き出し・ハンガーラック）'],
+  // ロフト
+  ['L', 700, 380, 800, 440, 0, 0.6, 0x7a6f60, 'ひな人形・五月人形'],
+  ['L', 820, 380, 940, 420, 0, 0.3, 0x7a6f60, 'クリスマスツリー（箱）'],
+  ['L', 700, 560, 800, 625, 0, 0.6, 0x7a6f60, '写真の段ボール・手芸用品'],
+  ['L', 820, 560, 940, 625, 0, 0.6, 0x7a6f60, '季節外の服（衣装ケース）'],
+  ['L', 860, 450, 940, 540, 0, 0.5, 0x7a6f60, '軽いキャンプ道具（イス・マット）'],
+  // 外（物置は仮の位置：東の隣地との間）
+  ['G', 1005, 100, 1080, 280, 0, 1.6, 0x5a5a5a, '物置（外）：テント・テーブル・クーラー・箱2・ゴルフ・スノーボード'],
+  ['G', 1010, 300, 1080, 480, 0, 1.0, 0x5a5a5a, '自転車（外）'],
+];
+function labelSprite(text, col) {
+  const c = document.createElement('canvas'), g = c.getContext('2d'), fs = 36;
+  g.font = `bold ${fs}px "Hiragino Sans","Yu Gothic",sans-serif`;
+  const w = Math.min(1400, Math.ceil(g.measureText(text).width) + 40); c.width = w; c.height = fs + 28;
+  g.font = `bold ${fs}px "Hiragino Sans","Yu Gothic",sans-serif`;
+  g.fillStyle = 'rgba(255,255,255,0.92)'; g.fillRect(0, 0, w, c.height);
+  g.fillStyle = '#' + col.toString(16).padStart(6, '0'); g.fillRect(0, 0, 10, c.height);
+  g.fillStyle = '#222'; g.textBaseline = 'middle'; g.fillText(text, 22, c.height / 2 + 1);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: true, transparent: true }));
+  const h = 0.11; s.scale.set(h * w / c.height, h, 1); s.userData.noOcc = true; return s;
+}
+const storeGroup = new THREE.Group(); storeGroup.name = 'storage';
+let storeOn = true;
+try { storeOn = localStorage.getItem('store_u') !== '0'; } catch (e) { /* 使えないときは出す */ }
+export function addStorage(furn, FL1) {
+  for (const [lv, x0, y0, x1, y1, h0, h1, col, text] of STORE) {
+    const base = FL1 + LV[lv];
+    const m = new THREE.Mesh(new THREE.BoxGeometry((x1 - x0) / 100, h1 - h0, (y1 - y0) / 100),
+      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.28, depthWrite: false }));
+    m.position.set(PX((x0 + x1) / 2), base + (h0 + h1) / 2, PZ((y0 + y1) / 2)); m.userData.noOcc = true;
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: col }));
+    m.add(e);
+    const s = labelSprite(text, col); s.position.set(PX((x0 + x1) / 2), base + h1 + 0.1, PZ((y0 + y1) / 2));
+    storeGroup.add(m, s);
+  }
+  storeGroup.visible = storeOn; furn.add(storeGroup);
+}
+function setStore(on) {
+  storeOn = on; storeGroup.visible = on;
+  try { localStorage.setItem('store_u', on ? '1' : '0'); } catch (e) { /* 保存できなくても切り替えはできる */ }
+  document.querySelectorAll('.storebtn').forEach((b) => { b.textContent = on ? '収納の中身を消す' : '収納の中身を出す'; b.classList.toggle('on', on); });
+  const d = window._dbg; d && d.ext && d.ext.invalidate && d.ext.invalidate();
+}
+{
+  const mk = () => { const b = document.createElement('button'); b.className = 'storebtn'; b.onclick = () => setStore(!storeOn); return b; };
+  document.querySelectorAll('.tvonbtn').forEach((b) => b.after(mk()));
+  setStore(storeOn);
+}
+window._store = { setStore, STORE };
