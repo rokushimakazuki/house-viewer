@@ -100,6 +100,36 @@ const SCEN = {
     guess: ['子どものお風呂 17:55〜18:10（順番が逆の日もある）', '父の 20:35〜21:00 は書斎', '母の入浴中、0歳は脱衣所で待つ', '洗濯物は夜に取り出して WIC へしまう', '寝る場所は全員 洋室3'],
   },
 };
+// ---- シーン（時間割の中から、見る場面を決めて見る）----
+// who＝最初に追いかける人。look＝その場面で見るポイント
+const SCENES = [
+  { id: 'am', sc: 'am', name: '朝の通し（6:00〜8:45）', all: true },
+  { id: 'wake', sc: 'am', t0: '06:35', t1: '07:04', name: '朝：起きてから朝ごはんまで', who: 'mama', look: '2階のトイレ・洗面所の順番。母が子どもを起こしに2階へ上がり、また1階へ下りる' },
+  { id: 'papaout', sc: 'am', t0: '07:15', t1: '07:31', name: '朝：父の出発', who: 'papa', look: '1階トイレ→シューズクローク→玄関。朝ごはん中の家族の横を通る' },
+  { id: 'kinder', sc: 'am', t0: '07:53', t1: '08:33', name: '朝：幼稚園の送り出し', who: 'mama', look: '2階で着替え・歯みがき→1階で靴→北の自転車。母が子ども3人を連れて階段を上り下りする' },
+  { id: 'pm', sc: 'pm', name: '夜の通し（17:15〜23:10）', all: true },
+  { id: 'bath', sc: 'pm', t0: '17:28', t1: '18:30', name: '夜：夕ごはん→子どもとお風呂', who: 'mama', look: 'ダイニングから2階の浴室へ。母の入浴中、赤ちゃんは脱衣所で待つ' },
+  { id: 'home', sc: 'pm', t0: '18:25', t1: '18:46', name: '夜：父の帰宅', who: 'papa', look: '道路→玄関→手洗い→2階で着替え→ダイニング。冬は真っ暗な中を帰ってくる' },
+  { id: 'sleep', sc: 'pm', t0: '20:05', t1: '20:30', name: '夜：歯みがき→寝かしつけ', who: 'mama', look: '2階の洗面所・トイレ→寝室。下の階では父が片付け' },
+  { id: 'late', sc: 'pm', t0: '21:55', t1: '23:05', name: '夜：夫婦の時間→寝る', who: 'papa', look: 'ソファから2階へ。子どもが寝ている寝室の前の廊下を、暗い中で通る' },
+];
+// 照明・スイッチを考えるときの「場所」のまとまり（歩く点 → 場所の名前）
+const AREA = { ldk_door: 'LDK', ldk_w: 'LDK', ldk_c: 'LDK', isl_w: 'LDK', aisle_w: 'LDK', kitchen: 'LDK', fridge: 'LDK', dining: 'LDK', sofa: 'LDK', washitsu_e: 'LDK',
+  toil1_d: 'ホール', tearai: 'ホール', under: 'ホール', hall_n: 'ホール', hall_m: 'ホール', hall_s: 'ホール',
+  stair_b: '階段', s8: '階段', w1: '階段', w2: '階段', s13: '階段', top: '2階の廊下', toil2_d: '2階の廊下',
+  senmen_o: '洗面所', bath_d: '脱衣所', datsui_d: '脱衣所', yo1_d: '洋室1', yo2_d: '洋室2', yo3_d: '洋室3', laundry_d: 'ランドリー', wic_d: 'WIC',
+  road: '外', bike: '外', porch_o: '外', porch: '外' };
+const areaOf = (n) => AREA[n] || N[n][3].replace(/（.*/, '');
+// 場所どうしのつながり。つながる先が1つだけの場所（和室・トイレ・浴室など）は行き止まり＝通り抜けに使わない側
+const AREA_ADJ = {};
+for (const [a, b] of E) { const x = areaOf(a), y = areaOf(b); if (x !== y) { (AREA_ADJ[x] ||= new Set()).add(y); (AREA_ADJ[y] ||= new Set()).add(x); } }
+// X から見て Y の側が「行き止まり」か：X を通らずに Y から外・階段へ行けなければ行き止まり（洗面所から見た脱衣所・浴室など）
+function deadSide(x, y) {
+  const seen = new Set([x, y]), st = [y];
+  while (st.length) { const a = st.pop(); if (a === '外' || a === '階段') return false; for (const b of AREA_ADJ[a] || []) if (!seen.has(b)) { seen.add(b); st.push(b); } }
+  return true;
+}
+const CORRIDOR = new Set(['2階の廊下', 'ホール', '玄関', 'LDK']);   // 通り道になる所：よく使う2つの側で 3路
 const tmin = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
 const fmt = (m) => { const h = Math.floor(m / 60), mm = Math.floor(m % 60); return h + ':' + String(mm).padStart(2, '0'); };
 
@@ -234,13 +264,15 @@ function build() {
   const box = el(`<div id="simbox"><div class="simhead"><b class="simttl" style="font-size:13px">暮らしの動き</b><span class="clock" id="simclk">6:00</span>
     <button id="simplay" aria-label="再生">▶</button><span style="flex:1"></span><button id="simmin">たたむ</button><button id="simx" aria-label="閉じる">✕</button></div>
   <div class="simbody">
-    <div><select id="simsc"><option value="am">${SCEN.am.name}</option><option value="pm">${SCEN.pm.name}</option></select><select id="simspd"><option value="30">30倍</option><option value="60" selected>60倍</option><option value="120">120倍</option></select>
+    <div><select id="simsc" aria-label="シーン">${SCENES.map((x) => `<option value="${x.id}">${x.name}</option>`).join('')}</select><select id="simspd"><option value="10">10倍</option><option value="30">30倍</option><option value="60" selected>60倍</option><option value="120">120倍</option></select>
       <select id="simssn" aria-label="季節"><option value="12-22">冬至（12/22）</option><option value="3-20">春分（3/20）</option><option value="6-21">夏至（6/21）</option><option value="9-23">秋分（9/23）</option><option value="today">今日</option></select></div>
+    <div class="sub" id="simlook" style="display:none"></div>
     <input type="range" id="simt" min="0" max="100" step="0.1" value="0">
     <div class="sub" style="display:flex;gap:6px;align-items:center"><label style="flex:none"><input type="checkbox" id="simsunon" checked> 日差し・暗さも合わせる</label><span id="simsun"></span></div>
-    <div><button data-view="auto" class="on">自動</button><button data-view="1">上から1階</button><button data-view="2">上から2階</button><button data-view="in">中から</button>
-      <label class="sub"><input type="checkbox" id="simtrail" checked> 歩いた道</label></div>
+    <div><button data-view="auto" class="on">自動</button><button data-view="1">上から1階</button><button data-view="2">上から2階</button><button data-view="in">中から</button><button data-view="eye">目線で歩く</button>
+      <label class="sub"><input type="checkbox" id="simtrail" checked> 歩いた道</label> <label class="sub"><input type="checkbox" id="simdark"> 暗い中の道（黄）</label></div>
     <details id="simppl" open><summary><b>家族</b> <span class="sub">名前をタップ＝その人を追いかける</span></summary><div id="simwho"></div></details>
+    <details id="simdk"><summary><b>暗い中で歩く所（照明・スイッチ・外灯）</b></summary><div id="simdkb"></div></details>
     <details id="simres"><summary><b>結果（歩いた距離・混み合い）</b></summary><div id="simresb"></div><div class="sub" id="simguess" style="margin-top:6px"></div></details>
   </div></div>`);
   document.body.append(box);
@@ -252,21 +284,23 @@ function build() {
   const figs = {}, labels = {};
   for (const p of PEOPLE) { const f = figure(p); root.add(f); figs[p.id] = f; }
   const trails = new THREE.Group(); root.add(trails);
-  state = { d, box, ind, chips: {}, sunOn: true, sunPrev: null, root, figs, labels, trails, sc: 'am', t: 0, play: false, view: 'auto', sel: 'mama', last: 0, FL1, P: null, res: null };
+  const darkG = new THREE.Group(); darkG.visible = false; root.add(darkG);
+  state = { d, box, ind, chips: {}, sunOn: true, sunPrev: null, root, figs, labels, trails, darkG, rng: null, scene: SCENES[0], sc: 'am', t: 0, play: false, view: 'auto', sel: 'mama', last: 0, FL1, P: null, res: null };
   const $ = (q) => box.querySelector(q);
   // 板の上の操作が、下の 3D（指で回す・タップで色選び）に伝わらないようにする
   for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'wheel']) box.addEventListener(ev, (e) => e.stopPropagation());
   tap($('#simx'), () => close());
   tap($('#simmin'), () => fold(!box.classList.contains('min')));
-  $('#simsc').onchange = () => load($('#simsc').value);
-  tap($('#simplay'), () => { state.play = !state.play; if (!state.play) sunSync(true); if (state.play && state.t >= tmin(SCEN[state.sc].t1)) state.t = tmin(SCEN[state.sc].t0); setPlayBtn(); state.last = performance.now(); loop(); });
-  tap($('#simwho'), (e) => { const x = e.target.closest && e.target.closest('.who'); if (!x) return; state.sel = x.dataset.id; applyView(true); update(); });
-  $('#simt').oninput = () => { const S = SCEN[state.sc]; state.t = tmin(S.t0) + (tmin(S.t1) - tmin(S.t0)) * $('#simt').value / 100; update(); };
+  $('#simsc').onchange = () => loadScene($('#simsc').value);
+  $('#simdark').onchange = () => { state.darkG.visible = $('#simdark').checked; inval(); };
+  tap($('#simplay'), () => { state.play = !state.play; if (!state.play) sunSync(true); if (state.play && state.t >= rng()[1] - 0.01) state.t = rng()[0]; setPlayBtn(); state.last = performance.now(); loop(); });
+  tap($('#simwho'), (e) => { const x = e.target.closest && e.target.closest('.who'); if (!x) return; state.sel = x.dataset.id; state.eyeInit = false; applyView(true); update(); });
+  $('#simt').oninput = () => { const [a, b] = rng(); state.t = a + (b - a) * $('#simt').value / 100; update(); };
   $('#simtrail').onchange = () => { trails.visible = $('#simtrail').checked; inval(); };
-  $('#simssn').onchange = () => { if (d.sunState) { d.sunState.season = $('#simssn').value; d.applySun && d.applySun(); } sunSync(true); };
+  $('#simssn').onchange = () => { if (d.sunState) { d.sunState.season = $('#simssn').value; d.applySun && d.applySun(); } sunSync(true); darkStudy(); };
   $('#simsunon').onchange = () => { state.sunOn = $('#simsunon').checked; if (state.sunOn) sunSync(true); else sunRestore(); };
-  for (const b of box.querySelectorAll('[data-view]')) tap(b, () => { state.view = b.dataset.view; for (const x of box.querySelectorAll('[data-view]')) x.classList.toggle('on', x === b); applyView(true); update(); });
-  tap(ind, (e) => { const x = e.target.closest && e.target.closest('.ind'); if (!x) return; state.sel = x.dataset.id;
+  for (const b of box.querySelectorAll('[data-view]')) tap(b, () => { state.view = b.dataset.view; state.eyeInit = false; for (const x of box.querySelectorAll('[data-view]')) x.classList.toggle('on', x === b); applyView(true); update(); });
+  tap(ind, (e) => { const x = e.target.closest && e.target.closest('.ind'); if (!x) return; state.sel = x.dataset.id; state.eyeInit = false;
     if (state.view === '1' || state.view === '2') { state.view = 'auto'; for (const b of box.querySelectorAll('[data-view]')) b.classList.toggle('on', b.dataset.view === 'auto'); }   // 階を決めて見ているときは「自動」に戻し、その人の階へ
     applyView(true); update(); });   // 札をタップ＝その人を追いかける
   return state;
@@ -306,6 +340,18 @@ function load(sc) {
   h += r.clash.length ? '<ul style="margin:4px 0;padding-left:18px">' + r.clash.map((c) => `<li>${fmt(c.t0)}〜${fmt(c.t1 + 1 / 6)}　${c.where}：${c.who.join('と')}</li>`).join('') + '</ul>' : '<div class="sub">なし</div>';
   state.box.querySelector('#simresb').innerHTML = h;
   state.box.querySelector('#simguess').innerHTML = '【推測】で入れた所：' + S.guess.join('／') + '。直したい所は教えてください。';
+  darkStudy();
+  update(); applyView(true);
+}
+function rng() { const S = SCEN[state.sc]; return state.rng || [tmin(S.t0), tmin(S.t1)]; }
+const isIn = () => state.view === 'in' || state.view === 'eye';
+function loadScene(id) {
+  const x = SCENES.find((y) => y.id === id) || SCENES[0]; state.scene = x;
+  if (state.sc !== x.sc || !state.P) load(x.sc);
+  state.rng = x.all ? null : [tmin(x.t0), tmin(x.t1)]; state.t = rng()[0];
+  if (x.who) state.sel = x.who;
+  const lk = state.box.querySelector('#simlook'); lk.style.display = x.look ? '' : 'none'; lk.textContent = x.look ? '見るポイント：' + x.look : '';
+  state.box.querySelector('#simsc').value = x.id; state.eyeInit = false;
   update(); applyView(true);
 }
 function update() {
@@ -314,7 +360,7 @@ function update() {
   applyView(false);   // 先に見る階を決めてから、人の表示を決める
   box.querySelector('#simclk').textContent = fmt(t);
   sunSync(false);
-  box.querySelector('#simt').value = (t - tmin(S.t0)) / (tmin(S.t1) - tmin(S.t0)) * 100;
+  { const [a, b] = rng(); box.querySelector('#simt').value = (t - a) / (b - a) * 100; }
   let wh = '';
   const babyHeld = posAt(P, 'baby', t).carried;   // 抱っこ中は母の名札を「母・赤ちゃん」にする
   for (const p of PEOPLE) {
@@ -324,17 +370,18 @@ function update() {
     if (q.walking) { const nx = posAt(P, p.id, t + 0.05); const dx = PX(nx.x) - PX(q.x), dz = PZ(nx.y) - PZ(q.y); if (Math.hypot(dx, dz) > 1e-4) f.rotation.y = Math.atan2(dx, dz); }
     f.rotation.x = 0; f.rotation.z = q.lying && !p.baby ? Math.PI / 2 : 0;
     if (q.lying && !p.baby) { f.position.y += 0.15; f.rotation.y = Math.PI; if (q.seg.node === 'bed1') f.position.z += p.id === 'k1' ? -0.22 : 0.22; }   // 息子と娘は同じベッドに並んで寝る   // 寝ている人は頭が東（まくらの側）
-    const act = q.seg.act, top = state.view !== 'in', nm = p.name.replace(/（.*/, '') + (p.id === 'mama' && babyHeld ? '・赤ちゃん' : ''), txt = top ? nm : nm + '：' + act;
+    const act = q.seg.act, top = !isIn(), nm = p.name.replace(/（.*/, '') + (p.id === 'mama' && babyHeld ? '・赤ちゃん' : ''), txt = top ? nm : nm + '：' + act;
     if (state.labels[p.id] !== txt) {
       if (f.userData.lab) f.remove(f.userData.lab);
       const L = label(txt, p.col); f.add(L); f.userData.lab = L; state.labels[p.id] = txt;
     }
     if (f.userData.lab) f.userData.lab.visible = !q.carried;   // 全員に名札（抱っこ中の赤ちゃんは母の名札にまとめる）
     f.userData.disc.visible = !q.carried && !q.lying;
-    f.visible = state.view === 'in' || (q.h > 1.6 ? 2 : 1) === state.floor;   // 上から見るときは、見ている階の人だけ
+    f.visible = isIn() || (q.h > 1.6 ? 2 : 1) === state.floor;   // 上から見るときは、見ている階の人だけ
+    if (state.view === 'eye' && (p.id === state.sel || (state.sel === 'mama' && p.id === 'baby' && q.carried))) f.visible = false;   // 目線で歩くときは、自分（と抱っこしている赤ちゃん）は見せない
     if (f.userData.lab) {   // 上から見るときは大きめ。選んだ人はさらに大きく。重ならないよう人ごとに高さをずらす
-      const L = f.userData.lab, k = state.view === 'in' ? 1 : (p.id === state.sel ? 2.0 : 1.6), rel = (q.h > 1.6 ? q.h - FL2 : q.h) + (q.lying && !p.baby ? 0.15 : 0),   // 床からの高さ（ベッドの上なら約0.6）
-        yy = state.view === 'in' ? p.h + 0.25 : 1.0 + PEOPLE.indexOf(p) * 0.17 - rel;   // 上から見るときは床から 1.0〜1.7m（2.1m で切っているのでその下）
+      const L = f.userData.lab, k = isIn() ? 1 : (p.id === state.sel ? 2.0 : 1.6), rel = (q.h > 1.6 ? q.h - FL2 : q.h) + (q.lying && !p.baby ? 0.15 : 0),   // 床からの高さ（ベッドの上なら約0.6）
+        yy = isIn() ? p.h + 0.25 : 1.0 + PEOPLE.indexOf(p) * 0.17 - rel;   // 上から見るときは床から 1.0〜1.7m（2.1m で切っているのでその下）
       L.scale.copy(L.userData.base).multiplyScalar(k);
       if (q.lying && !p.baby) L.position.set(yy, 0, 0); else L.position.set(0, yy, 0);   // 寝ている人は体が横向きなので、体の x が上
     }
@@ -342,13 +389,45 @@ function update() {
     wh += `<div class="who${state.sel === p.id ? ' sel' : ''}" data-id="${p.id}"><span class="dot" style="background:#${p.col.toString(16).padStart(6, '0')}"></span><div><b>${p.name}</b>　${q.carried ? 'ママに抱っこ' : act}<div class="sub">${q.carried ? '' : (q.walking ? '移動中' : where[3])}</div></div></div>`;
   }
   const w = box.querySelector('#simwho'); if (w.dataset.h !== wh) { w.innerHTML = wh; w.dataset.h = wh; }   // 変わったときだけ書き換える（指の下の名前が消えないように）
+  // 目線で歩くときは、色の線（歩いた道）は視界のじゃまになるので消す。暗い中の道（黄）は壁の向こうを透かさない
+  state.trails.visible = state.box.querySelector('#simtrail').checked && state.view !== 'eye';
+  if (state.darkG.userData.m) state.darkG.userData.m.depthTest = isIn();
+  for (const m of state.darkG.children) m.visible = isIn() || m.userData.fl === state.floor;
+  eyeCam();
   inval();
+}
+// ---- 目線で歩く ----
+// 選んだ人の目の高さにカメラを置き、歩いている間は進む方向へ少しずつ向く。止まっている間は指で見回せる
+const EYE = { papa: 1.6, mama: 1.48, k1: 0.95, k2: 0.78 };
+function eyeCam() {
+  if (state.view !== 'eye') return;
+  const d = state.d, id = state.sel, p = PEOPLE.find((x) => x.id === id), q = posAt(state.P, id, state.t);
+  const up = q.carried ? 0.3 : q.lying ? 0.3 : (EYE[id] || p.h * 0.92);
+  const pos = d.furn.localToWorld(new THREE.Vector3(PX(q.x), state.FL1 + q.h + up + (q.lying ? 0.15 : 0), PZ(q.y)));
+  d.camera.position.copy(pos);
+  let tgtYaw = null, tgtPitch = q.lying ? 0.9 : -0.12;
+  if (q.walking) {
+    const nx = posAt(state.P, id, state.t + 0.06), dir = new THREE.Vector3(PX(nx.x) - PX(q.x), 0, PZ(nx.y) - PZ(q.y));
+    if (dir.lengthSq() > 1e-6) { dir.transformDirection(d.furn.matrixWorld); dir.y = 0; tgtYaw = d.heading(dir.normalize()); }
+    const dh = nx.h - q.h; if (Math.abs(dh) > 0.01) tgtPitch = dh > 0 ? 0.05 : -0.35;   // 階段：上りは前、下りは足元
+  }
+  const ins = d.inside, k = state.eyeInit ? 0.12 : 1;
+  if (tgtYaw !== null) { let a = tgtYaw - ins.yaw; a = Math.atan2(Math.sin(a), Math.cos(a)); ins.yaw += a * k; }
+  if (q.walking || q.lying || !state.eyeInit) ins.pitch += (tgtPitch - ins.pitch) * k;
+  state.eyeInit = true;
+  const vp = document.getElementById('vpname'), txt = p.name.replace(/（.*/, '') + 'の目線（目の高さ 約' + Math.round((q.lying || q.carried ? up : EYE[id] || p.h * 0.92) * 100) + 'cm）' + (q.walking ? '・歩いている間は実際の速さ' : '');
+  if (vp && vp.textContent !== txt) vp.textContent = txt;
 }
 // 見る方向：上から見るときは、その階の天井より上を切って見せる
 let lastFloor = null;
 function applyView(force) {
   const d = state.d, view = state.view;
   const q = posAt(state.P, state.sel, state.t), floor = view === '1' ? 1 : view === '2' ? 2 : (q.h > 1.6 ? 2 : 1);
+  if (view === 'eye') {
+    d.renderer.clippingPlanes = [];
+    if (force) { if (!d.inside.on) d.enterInside(); lastFloor = null; const bar = document.getElementById('bar'), bm = document.getElementById('barmin'); if (bar && bm && !bar.classList.contains('min')) bm.click(); }   // 動画のように見られるよう、下の操作はたたむ
+    return;
+  }
   if (view === 'in') {
     d.renderer.clippingPlanes = [];
     if (force) { if (!d.inside.on) d.enterInside(); lastFloor = null; const w = state.figs[state.sel].getWorldPosition(new THREE.Vector3()); d.camera.position.set(w.x - 1.0, w.y + 1.55, w.z + 1.0); d.inside.yaw = d.heading(new THREE.Vector3(1, 0, -1)); d.inside.pitch = -0.3; }
@@ -375,7 +454,7 @@ function sunSync(force) {
   const d = state.d; if (!state.sunOn || !d.sunState || !d.setHour || !d.ext) return;
   const el = state.box.querySelector('#simsun'), ssn = state.box.querySelector('#simssn');
   if (!state.sunPrev) state.sunPrev = { hour: d.sunState.hour, night: d.ext.isNight() };
-  if (ssn.value !== d.sunState.season) ssn.value = d.sunState.season;   // 日差しの板で季節を変えたときも合わせる
+  if (ssn.value !== d.sunState.season) { ssn.value = d.sunState.season; darkStudy(); }   // 日差しの板で季節を変えたときも合わせる
   const h = state.t / 60;
   if (!force && Math.abs(h - d.sunState.hour) < 1 / 120 && state.sunTxt) return;
   d.setHour(h);
@@ -392,6 +471,77 @@ function sunRestore() {
   if (d.ext.isNight() !== p.night) { d.ext.setNight(p.night); const n = document.getElementById('night'); if (n) n.checked = p.night; }
   inval();
 }
+// ---- 暗い中で歩く所 ----
+// 朝・夜の両方の時間割で、太陽が地平線より下の時刻に歩く道を集める（季節は板で選んだもの）。
+// 場所ごとに「どちら側から入って、どちら側へ出るか」を数え、2つ以上の側から出入りする所は 3路スイッチ（両側で点け消し）の候補にする
+function seasonMD() { const s = state.d.sunState ? state.d.sunState.season : '3-20'; if (s === 'today') { const t = new Date(); return [t.getMonth() + 1, t.getDate()]; } return s.split('-').map(Number); }
+function isDark(tm) { const d = state.d; if (!d.sunDir) return false; const [m, dd] = seasonMD(); return d.sunDir(m, dd, tm / 60, new THREE.Vector3()).y <= 0.01; }
+const SMALL_LIGHT = new Set(['1階トイレ', '2階トイレ', 'WIC', 'シューズクローク', '玄関', 'ランドリー', '脱衣所']);
+function darkStudy() {
+  if (!state.P) return;
+  const A = {}, sname = ({ '12-22': '冬至', '3-20': '春分', '6-21': '夏至', '9-23': '秋分', today: '今日' })[state.d.sunState ? state.d.sunState.season : '3-20'];
+  const add = (ar) => (A[ar] ||= { n: 0, sides: {}, who: new Set(), times: [], stay: 0 });
+  const lines = [];
+  for (const sc of ['am', 'pm']) {
+    const P = sc === state.sc ? state.P : plan(sc);
+    for (const p of PEOPLE) {
+      if (p.baby) continue;
+      const segs = P[p.id];
+      for (let i = 0; i < segs.length; i++) {
+        const g = segs[i]; if (g.type !== 'walk' || !isDark(g.t0)) continue;
+        if (sc === state.sc) lines.push(g.path);
+        const seq = []; for (const n of g.path) { const a = areaOf(n); if (!seq.length || seq[seq.length - 1] !== a) seq.push(a); }
+        seq.forEach((a, k) => {
+          const o = add(a); o.n++; o.who.add(p.name.replace(/（.*/, '')); o.times.push(g.t0);
+          if (k > 0) o.sides[seq[k - 1]] = (o.sides[seq[k - 1]] || 0) + 1;
+          if (k < seq.length - 1) o.sides[seq[k + 1]] = (o.sides[seq[k + 1]] || 0) + 1;
+        });
+        const nx = segs[i + 1]; if (nx && nx.type === 'stay') { const dur = Math.min(nx.t1, tmin(SCEN[sc].t1)) - nx.t0; if (dur < 10 && dur > 0) add(seq[seq.length - 1]).stay++; }   // 暗い中、10分未満だけいる所
+      }
+    }
+  }
+  // 3D：暗い中で歩く道（いま見ている朝か夜の分）を黄色の管で
+  const G = state.darkG; while (G.children.length) { const c = G.children[0]; G.remove(c); c.geometry.dispose(); }
+  const mat = G.userData.m || (G.userData.m = new THREE.MeshBasicMaterial({ color: 0xffd400, transparent: true, opacity: 0.85, depthTest: false }));
+  for (const path of lines) {
+    // 階ごとに分ける（上から見るときは、見ている階の分だけ出す）
+    const parts = []; let cur = null;
+    for (let k = 1; k < path.length; k++) {
+      const a = path[k - 1], b = path[k], fl = (N[a][2] + N[b][2]) / 2 > 1.6 ? 2 : 1;
+      if (!cur || cur.fl !== fl) { cur = { fl, nodes: [a] }; parts.push(cur); }
+      cur.nodes.push(b);
+    }
+    for (const pt of parts) {
+      const pts = pt.nodes.map((n) => new THREE.Vector3(PX(N[n][0]), state.FL1 + N[n][2] + 0.06, PZ(N[n][1])));
+      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.05), pts.length * 6, 0.035, 6, false), mat);
+      m.renderOrder = 25; m.userData.noOcc = true; m.userData.fl = pt.fl; G.add(m);
+    }
+  }
+  // 表
+  const rows = Object.entries(A).sort((a, b) => b[1].n - a[1].n);
+  let h = `<div class="sub">${sname}の日の出前・日没後に歩く所（朝と夜の両方）。【計算】回数は、その場所を通った・出入りした回数。出入りする側の（ ）は、その側から入った・その側へ出た回数</div>`;
+  if (!rows.length) h += '<div class="sub">この季節は、暗い中で歩く所はありません</div>';
+  else {
+    h += '<table><tr><th>場所</th><th>回数</th><th>出入りする側</th><th>候補【推測】</th></tr>';
+    for (const [a, o] of rows) {
+      const sides = Object.keys(o.sides).sort((x, y) => o.sides[y] - o.sides[x]);
+      const thru = CORRIDOR.has(a) && a !== 'LDK' ? sides.filter((x) => x === '外' || (AREA_ADJ[x] ? AREA_ADJ[x].size : 0) > 1) : sides.filter((x) => !deadSide(a, x));   // 通り道は、1部屋だけの行き止まり（トイレ・書斎など）の側を除く。部屋は、行き止まりにつながる側を除く
+      let c;
+      if (a === '外') c = '外灯・足元灯（人感センサー）';
+      else if (a === '階段') c = '3路（1階と2階の両方で点け消し）';
+      else {
+        c = thru.length >= 2 ? '3路（' + thru.slice(0, 2).join('側と') + '側）' : '入口に1つ' + (thru.length ? '（' + thru[0] + '側）' : '');
+        if (thru.length >= 3) c += '。ほかに' + thru.slice(2).join('・') + '側からも入る';
+      }
+      if (o.stay && SMALL_LIGHT.has(a)) c += '／人感センサーも向く';
+      const tm = [...new Set(o.times.map((x) => fmt(x)))].sort((x, y) => tmin(x.padStart(5, '0')) - tmin(y.padStart(5, '0'))).slice(0, 6).join('、');
+      h += `<tr><td>${a}</td><td>${o.n}</td><td>${sides.map((x) => x + '（' + o.sides[x] + '）').join('・') || '—'}</td><td>${c}<div class="sub">${[...o.who].join('・')}　${tm}</div></td></tr>`;
+    }
+    h += '</table><div class="sub" style="margin-top:4px">【推測】窓のない所（廊下・トイレ・WIC など）は、昼でも明かりが要ることがあります。ここでは日の出前・日没後だけを数えています</div>';
+  }
+  state.box.querySelector('#simdkb').innerHTML = h;
+  inval();
+}
 // ---- 見えない人の札 ----
 // その人の 3D の名札が画面に見えていないとき（上から見ていてほかの階にいる・画面の外・中から見て後ろ側・左上の板の下）に出す。
 // ほかの階の人は、見ている階の同じ位置（真上・真下）に「2階」などの札を出す。画面の外の人は、その方向の画面の端に矢印つきで出す
@@ -405,7 +555,7 @@ function drawInd() {
   const d = state.d, cam = d.camera, ind = state.ind;
   if (d.renderer.xr && d.renderer.xr.isPresenting) { ind.style.display = 'none'; indSig = ''; return; }
   if (ind.style.display !== 'block') ind.style.display = 'block';
-  const W = innerWidth, H = innerHeight, top = state.view !== 'in';
+  const W = innerWidth, H = innerHeight, top = !isIn();
   cam.updateMatrixWorld();
   // 板の位置・大きさは 0.3 秒ごとに測る（毎コマ測ると iPad で重い）
   const now = performance.now();
@@ -429,7 +579,7 @@ function drawInd() {
     let c = state.chips[p.id];
     if (!c) { c = state.chips[p.id] = el(`<div class="ind" data-id="${p.id}"><span class="ar"></span><span class="nm"></span><span class="tg"></span></div>`); c.style.borderLeftColor = '#' + p.col.toString(16).padStart(6, '0'); c.querySelector('.ar').style.borderBottomColor = c.style.borderLeftColor; ind.append(c); }
     const hide = () => { if (c.style.display !== 'none') c.style.display = 'none'; };
-    if (q.carried) { hide(); continue; }
+    if (q.carried || (state.view === 'eye' && p.id === state.sel)) { hide(); continue; }   // 目線で歩いている本人の札は出さない
     const pf = q.h < -0.3 ? 0 : q.h > 1.6 ? 2 : 1;   // 0＝家の外
     const shown = f.visible && f.userData.lab && f.userData.lab.visible;
     // 札を出す目標の点：見えている人は名札の位置、ほかの階の人は見ている階の同じ平面位置
@@ -485,8 +635,9 @@ function drawInd() {
 function loop() {
   if (!state || !state.play) return;
   const now = performance.now(), dt = (now - state.last) / 1000; state.last = now;
-  const spd = +state.box.querySelector('#simspd').value;   // 1秒で何分進めるか（60倍＝1秒で1分）
-  state.t += dt * spd / 60; const end = tmin(SCEN[state.sc].t1);
+  let spd = +state.box.querySelector('#simspd').value;   // 1秒で何分進めるか（60倍＝1秒で1分）
+  if (state.view === 'eye' && posAt(state.P, state.sel, state.t).walking) spd = 1;   // 目線で歩くときは、歩いている間だけ実際の速さ
+  state.t += dt * spd / 60; const end = rng()[1];
   if (state.t >= end) { state.t = end; state.play = false; setPlayBtn(); setTimeout(() => sunSync(true), 0); if (!state.box.classList.contains('min')) state.box.querySelector('#simres').open = true; }
   update();
   requestAnimationFrame(loop);
@@ -496,7 +647,7 @@ function open() {
   state.box.style.display = 'block'; state.root.visible = true;
   const ui = document.getElementById('ui'); if (ui) { state.uiDisp = ui.style.display; ui.style.display = 'none'; }   // スマホで重ならないように、説明の板は隠す
   window._design && window._design.closePop && window._design.closePop(); window._store && window._store.closePop && window._store.closePop();   // 下に出ている色選び・収納の板は閉じる
-  if (!state.P) load('am'); else { applyView(true); sunSync(true); }
+  if (!state.P) loadScene('am'); else { applyView(true); sunSync(true); }
   if (!state.indRun) { state.indRun = true; requestAnimationFrame(indLoop); }
 }
 function close() {
@@ -512,4 +663,4 @@ function addButtons() {
   const b2 = document.createElement('button'); b2.textContent = '暮らしの動き'; b2.onclick = open; bar.parentNode.insertBefore(b2, bar);
 }
 addButtons();
-window._sim = { open, close, plan, analyze, SCEN, PEOPLE, N, route, isOpen: () => !!state && state.box.style.display !== 'none', playing: () => !!state && state.play && state.box.style.display !== 'none' };
+window._sim = { open, close, plan, analyze, SCEN, SCENES, PEOPLE, N, route, loadScene, darkStudy, isOpen: () => !!state && state.box.style.display !== 'none', playing: () => !!state && state.play && state.box.style.display !== 'none' };
