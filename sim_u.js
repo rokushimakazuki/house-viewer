@@ -234,8 +234,10 @@ function build() {
   const box = el(`<div id="simbox"><div class="simhead"><b class="simttl" style="font-size:13px">暮らしの動き</b><span class="clock" id="simclk">6:00</span>
     <button id="simplay" aria-label="再生">▶</button><span style="flex:1"></span><button id="simmin">たたむ</button><button id="simx" aria-label="閉じる">✕</button></div>
   <div class="simbody">
-    <div><select id="simsc"><option value="am">${SCEN.am.name}</option><option value="pm">${SCEN.pm.name}</option></select><select id="simspd"><option value="30">30倍</option><option value="60" selected>60倍</option><option value="120">120倍</option></select></div>
+    <div><select id="simsc"><option value="am">${SCEN.am.name}</option><option value="pm">${SCEN.pm.name}</option></select><select id="simspd"><option value="30">30倍</option><option value="60" selected>60倍</option><option value="120">120倍</option></select>
+      <select id="simssn" aria-label="季節"><option value="12-22">冬至（12/22）</option><option value="3-20">春分（3/20）</option><option value="6-21">夏至（6/21）</option><option value="9-23">秋分（9/23）</option><option value="today">今日</option></select></div>
     <input type="range" id="simt" min="0" max="100" step="0.1" value="0">
+    <div class="sub" style="display:flex;gap:6px;align-items:center"><label style="flex:none"><input type="checkbox" id="simsunon" checked> 日差し・暗さも合わせる</label><span id="simsun"></span></div>
     <div><button data-view="auto" class="on">自動</button><button data-view="1">上から1階</button><button data-view="2">上から2階</button><button data-view="in">中から</button>
       <label class="sub"><input type="checkbox" id="simtrail" checked> 歩いた道</label></div>
     <details id="simppl" open><summary><b>家族</b> <span class="sub">名前をタップ＝その人を追いかける</span></summary><div id="simwho"></div></details>
@@ -250,7 +252,7 @@ function build() {
   const figs = {}, labels = {};
   for (const p of PEOPLE) { const f = figure(p); root.add(f); figs[p.id] = f; }
   const trails = new THREE.Group(); root.add(trails);
-  state = { d, box, ind, chips: {}, root, figs, labels, trails, sc: 'am', t: 0, play: false, view: 'auto', sel: 'mama', last: 0, FL1, P: null, res: null };
+  state = { d, box, ind, chips: {}, sunOn: true, sunPrev: null, root, figs, labels, trails, sc: 'am', t: 0, play: false, view: 'auto', sel: 'mama', last: 0, FL1, P: null, res: null };
   const $ = (q) => box.querySelector(q);
   // 板の上の操作が、下の 3D（指で回す・タップで色選び）に伝わらないようにする
   for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'wheel']) box.addEventListener(ev, (e) => e.stopPropagation());
@@ -261,6 +263,8 @@ function build() {
   tap($('#simwho'), (e) => { const x = e.target.closest && e.target.closest('.who'); if (!x) return; state.sel = x.dataset.id; applyView(true); update(); });
   $('#simt').oninput = () => { const S = SCEN[state.sc]; state.t = tmin(S.t0) + (tmin(S.t1) - tmin(S.t0)) * $('#simt').value / 100; update(); };
   $('#simtrail').onchange = () => { trails.visible = $('#simtrail').checked; inval(); };
+  $('#simssn').onchange = () => { if (d.sunState) { d.sunState.season = $('#simssn').value; d.applySun && d.applySun(); } sunSync(true); };
+  $('#simsunon').onchange = () => { state.sunOn = $('#simsunon').checked; if (state.sunOn) sunSync(true); else sunRestore(); };
   for (const b of box.querySelectorAll('[data-view]')) tap(b, () => { state.view = b.dataset.view; for (const x of box.querySelectorAll('[data-view]')) x.classList.toggle('on', x === b); applyView(true); update(); });
   tap(ind, (e) => { const x = e.target.closest && e.target.closest('.ind'); if (!x) return; state.sel = x.dataset.id;
     if (state.view === '1' || state.view === '2') { state.view = 'auto'; for (const b of box.querySelectorAll('[data-view]')) b.classList.toggle('on', b.dataset.view === 'auto'); }   // 階を決めて見ているときは「自動」に戻し、その人の階へ
@@ -309,6 +313,7 @@ function update() {
   const box = state.box;
   applyView(false);   // 先に見る階を決めてから、人の表示を決める
   box.querySelector('#simclk').textContent = fmt(t);
+  sunSync(false);
   box.querySelector('#simt').value = (t - tmin(S.t0)) / (tmin(S.t1) - tmin(S.t0)) * 100;
   let wh = '';
   const babyHeld = posAt(P, 'baby', t).carried;   // 抱っこ中は母の名札を「母・赤ちゃん」にする
@@ -361,6 +366,30 @@ function applyView(force) {
     const asp = innerWidth / innerHeight, k = Math.max(1, 1.3 / asp), sh = asp < 1 ? 6 : 0, sx = asp >= 1 ? 2.2 : 0;
     d.camera.position.set(c.x - sx, c.y + 10 * k, c.z + 5 * k - sh); d.orbit.target.set(c.x - sx, c.y, c.z - sh); d.orbit.update();
   }
+  inval();
+}
+// ---- 日差しと暗さ ----
+// 暮らしの動きの時刻に合わせて、太陽の位置（季節はこの板か、日差しの板で選んだもの）を動かす。
+// 太陽が地平線より下（日の出前・日没後）は「夜にする（照明をつける）」と同じ状態にする。閉じたら元の時刻・夜の設定に戻す
+function sunSync(force) {
+  const d = state.d; if (!state.sunOn || !d.sunState || !d.setHour || !d.ext) return;
+  const el = state.box.querySelector('#simsun'), ssn = state.box.querySelector('#simssn');
+  if (!state.sunPrev) state.sunPrev = { hour: d.sunState.hour, night: d.ext.isNight() };
+  if (ssn.value !== d.sunState.season) ssn.value = d.sunState.season;   // 日差しの板で季節を変えたときも合わせる
+  const h = state.t / 60;
+  if (!force && Math.abs(h - d.sunState.hour) < 1 / 120 && state.sunTxt) return;
+  d.setHour(h);
+  const dark = d.sunState.alt <= 0.01;
+  if (dark !== d.ext.isNight()) { d.ext.setNight(dark); const n = document.getElementById('night'); if (n) n.checked = dark; }
+  const deg = Math.round(d.sunState.alt * 180 / Math.PI), nm = ssn.selectedOptions[0].textContent.replace(/（.*/, '');
+  const txt = nm + '　' + (dark ? (h < 12 ? '日の出前' : '日没後') + '（照明をつけています）' : '太陽の高さ ' + deg + '°');
+  if (state.sunTxt !== txt) { el.textContent = txt; state.sunTxt = txt; }
+}
+function sunRestore() {
+  const d = state.d, p = state.sunPrev; state.sunPrev = null; state.sunTxt = null; state.box.querySelector('#simsun').textContent = '';
+  if (!p || !d.setHour) return;
+  d.setHour(p.hour);
+  if (d.ext.isNight() !== p.night) { d.ext.setNight(p.night); const n = document.getElementById('night'); if (n) n.checked = p.night; }
   inval();
 }
 // ---- 見えない人の札 ----
@@ -454,12 +483,12 @@ function open() {
   state.box.style.display = 'block'; state.root.visible = true;
   const ui = document.getElementById('ui'); if (ui) { state.uiDisp = ui.style.display; ui.style.display = 'none'; }   // スマホで重ならないように、説明の板は隠す
   window._design && window._design.closePop && window._design.closePop(); window._store && window._store.closePop && window._store.closePop();   // 下に出ている色選び・収納の板は閉じる
-  if (!state.P) load('am'); else applyView(true);
+  if (!state.P) load('am'); else { applyView(true); sunSync(true); }
   if (!state.indRun) { state.indRun = true; requestAnimationFrame(indLoop); }
 }
 function close() {
   const ui = document.getElementById('ui'); if (ui && !state.d.inside.on) ui.style.display = state.uiDisp || '';
-  state.play = false; state.box.style.display = 'none'; state.root.visible = false; state.ind.style.display = 'none'; state.d.renderer.clippingPlanes = []; lastFloor = null; inval();
+  state.play = false; sunRestore(); state.box.style.display = 'none'; state.root.visible = false; state.ind.style.display = 'none'; state.d.renderer.clippingPlanes = []; lastFloor = null; inval();
 }
 // ボタンを置く（外から見るときの左の板と、中から見るときの下の操作）
 function addButtons() {
