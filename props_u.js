@@ -422,10 +422,19 @@ const MODELS = {
       for (const s of [-1, 1]) rb(g, 0.026, len * 0.42, 0.06, FA(c), x, yb - 0.05 - len * 0.42, s * 0.15, 0.012);
     });
   },
-  // 子ども乗せ電動自転車（後ろにチャイルドシート、前にかご）
-  bike(g, W, D, H) {
-    const fm = pm(0x4a5a52, 0.45, 0.3), R = 0.3, fx = -0.58, rx = 0.58;
-    wheel(g, R, 0.025, fx, R, 0, 'z', 16); wheel(g, R, 0.025, rx, R, 0, 'z', 16);
+  // 自転車4台（北側に斜めに止める）：子ども乗せ電動・シティサイクル・子どもの自転車・クロスバイク
+  bikes(g, W, D, H) {
+    const kinds = [{ col: 0x4a5a52, seat: true, basket: true }, { col: 0xb9bcc0, basket: true }, { col: 0xc0392b, s: 0.7 }, { col: 0x26282b, sport: true }];
+    kinds.forEach((o, i) => {
+      const b = new THREE.Group(); b.position.set(-W / 2 + 0.75 + i * 1.08, 0, 0.03); b.rotation.y = -Math.PI / 6;
+      b.scale.setScalar(o.s || 1); g.add(b); MODELS.bike(b, 1.8, 0.6, 1.0, o);
+    });
+  },
+  // 自転車（前が -x）。o.seat＝後ろに子ども乗せ、o.basket＝前かご、o.sport＝細いタイヤ
+  bike(g, W, D, H, o = { seat: true, basket: true, col: 0x4a5a52 }) {
+    const fm = pm(o.col ?? 0x4a5a52, 0.45, 0.3), R = 0.3, fx = -0.58, rx = 0.58;
+    const tw = o.sport ? 0.014 : 0.025;
+    wheel(g, R, tw, fx, R, 0, 'z', 16); wheel(g, R, tw, rx, R, 0, 'z', 16);
     const h1 = [-0.4, 0.68, 0], h2 = [-0.44, 0.86, 0], low = [-0.22, 0.26, 0], bb = [0.02, 0.27, 0], st = [0.16, 0.84, 0];
     tb(g, h1, low, 0.024, fm); tb(g, low, bb, 0.024, fm); tb(g, bb, st, 0.02, fm); tb(g, h1, h2, 0.026, fm);
     for (const s of [-1, 1]) {
@@ -435,30 +444,88 @@ const MODELS = {
     tb(g, h2, [-0.46, 1.0, 0], 0.016, fm); tb(g, [-0.42, 1.0, -0.28], [-0.42, 1.0, 0.28], 0.012, ME(0x2b2c2e));
     for (const s of [-1, 1]) cyh(g, 0.018, 0.1, RU(), -0.42, 1.0, s * 0.24, 'z', 12);
     tb(g, st, [0.17, 0.92, 0], 0.014, ME(0x9a9ea2)); rb(g, 0.26, 0.06, 0.16, RU(0x1e1e1f), 0.18, 0.91, 0, 0.03);
-    rb(g, 0.09, 0.3, 0.09, pm(0x2b2c2e, 0.4), 0.12, 0.4, 0, 0.02).rotation.z = -0.22;
+    if (o.seat) rb(g, 0.09, 0.3, 0.09, pm(0x2b2c2e, 0.4), 0.12, 0.4, 0, 0.02).rotation.z = -0.22;   // 電動のバッテリー
     rb(g, 0.5, 0.1, 0.02, fm, 0.3, 0.22, 0.06, 0.03);
     for (const s of [-1, 1]) { tb(g, [0.02, 0.27, s * 0.07], [0.02 + s * 0.08, 0.27 - s * 0.14, s * 0.08], 0.01, ME(0x555555)); rb(g, 0.09, 0.02, 0.06, RU(), 0.02 + s * 0.08, 0.26 - s * 0.14, s * 0.12, 0.006); }
     // 泥よけ
     for (const x of [fx, rx]) { const f = arc(g, R + 0.015, 0.03, Math.PI * 0.75, fm, x, R, 0); f.rotation.z = Math.PI * 0.12; f.scale.z = 1.5; }
     // スタンド
     for (const s of [-1, 1]) tb(g, [0.42, 0.27, s * 0.06], [0.46, 0.0, s * 0.16], 0.01, ME(0x777777));
-    // うしろの子ども乗せ（荷台の上）
+    if (!o.seat && !o.basket) return;
+    // うしろの荷台
     rb(g, 0.36, 0.02, 0.16, fm, 0.58, 0.66, 0, 0.005);
     for (const s of [-1, 1]) tb(g, [0.42, 0.66, s * 0.07], [rx, R + 0.02, s * 0.06], 0.008, fm);
+    if (o.seat) {   // 子ども乗せ
     const cs = PL(0x3a3c3f);
     rb(g, 0.3, 0.06, 0.3, cs, 0.56, 0.68, 0, 0.03); rb(g, 0.06, 0.5, 0.32, cs, 0.73, 0.68, 0, 0.03);
     for (const s of [-1, 1]) rb(g, 0.28, 0.18, 0.03, cs, 0.57, 0.72, s * 0.16, 0.012);
+    }
     // 前のかご（金網）
     const bm = pm(0x2b2c2e, 0.4, 0.5), kx = -0.66, ky = 0.8;
     rb(g, 0.3, 0.008, 0.34, bm, kx, ky, 0, 0);
     for (const [w, d, x, z] of [[0.006, 0.34, -0.15, 0], [0.006, 0.34, 0.15, 0], [0.3, 0.006, 0, -0.17], [0.3, 0.006, 0, 0.17]]) rb(g, w, 0.22, d, bm, kx + x, ky, z, 0);
     sp(g, 0.035, 0.035, 0.03, pm(0xf2f0ea, 0.3), -0.5, 0.86, 0, 10);
   },
+  // ベッド（シングル）：木の枠・マットレス・掛け布団・まくら。頭が -z
+  bed(g, W, D, H, o = {}) {
+    const wd = pm(0xc8a47c, 0.6), duv = FA(o.col ?? 0xb7c7dd);
+    rb(g, W, 0.2, D, wd, 0, 0.08, 0, 0.01);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) rb(g, 0.06, 0.08, 0.06, wd, sx * (W / 2 - 0.05), 0, sz * (D / 2 - 0.05), 0.005);
+    rb(g, W, 0.7, 0.05, wd, 0, 0.08, -D / 2 + 0.025, 0.012);
+    rb(g, W - 0.04, 0.2, D - 0.08, FA(0xf4f2ee), 0, 0.28, 0.02, 0.05);
+    rb(g, W + 0.02, 0.07, D * 0.66, duv, 0, 0.45, D / 2 - D * 0.33, 0.035);
+    rb(g, W + 0.03, 0.2, 0.04, duv, 0, 0.3, D / 2 + 0.005, 0.02);   // 足元に垂れた所
+    rb(g, W * 0.62, 0.1, 0.36, FA(0xf8f7f3), 0, 0.47, -D / 2 + 0.3, 0.045);
+  },
+  // ドラム式洗濯機：丸い扉（ガラス）・上の操作パネル・洗剤の引き出し
+  washer(g, W, D, H) {
+    const wh = pm(0xeeeff0, 0.35), dk = pm(0x2a2c2f, 0.25);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) cy(g, 0.025, 0.03, 0.03, RU(), sx * (W / 2 - 0.08), 0, sz * (D / 2 - 0.08), 10);
+    rb(g, W - 0.02, H - 0.03, D - 0.04, wh, 0, 0.03, -0.01, 0.025);
+    const cz = D / 2 - 0.03, cyy = 0.47;
+    add(g, new THREE.TorusGeometry(0.2, 0.025, 10, 32), pm(0xc9ccd0, 0.3, 0.5), 0, cyy, cz + 0.01);
+    cyh(g, 0.185, 0.02, pm(0x1c2329, 0.08), 0, cyy, cz, 'z', 32);
+    rb(g, 0.05, 0.12, 0.02, pm(0xc9ccd0, 0.3, 0.5), 0.2, cyy - 0.06, cz + 0.01, 0.008);
+    rb(g, (W - 0.02) * 0.62, 0.09, 0.012, dk, 0.08, H - 0.15, cz - 0.005, 0.01);
+    rb(g, 0.18, 0.06, 0.012, pm(0xdcdde0, 0.35), -W / 2 + 0.14, H - 0.14, cz - 0.004, 0.008);
+  },
+  // トイレ（タンクの低い一体型）：便器・便座・ふた・タンク。後ろが -z
+  toilet(g, W, D, H) {
+    const wh = pm(0xf7f7f5, 0.18);
+    rb(g, 0.26, 0.3, 0.4, wh, 0, 0, 0.02, 0.06);
+    sp(g, 0.19, 0.1, 0.25, wh, 0, 0.33, 0.06, 20);
+    const seat = add(g, new THREE.TorusGeometry(0.15, 0.035, 8, 28), wh, 0, 0.41, 0.06); seat.rotation.x = Math.PI / 2; seat.scale.set(1.15, 1.45, 0.5);
+    sp(g, 0.19, 0.025, 0.25, pm(0xf2f2f0, 0.25), 0, 0.445, 0.06, 20);   // ふた（閉じている）
+    rb(g, W, 0.25, 0.22, wh, 0, 0.36, -D / 2 + 0.11, 0.04);
+    rb(g, W * 0.7, 0.04, 0.12, pm(0xe6e6e4, 0.3), 0, 0.6, -D / 2 + 0.11, 0.015);
+  },
+  // 浴槽（エプロンつき）。洗い場が +z
+  bath(g, W, D, H) {
+    const wh = pm(0xf3f3f1, 0.2), t = 0.08;
+    rb(g, W, 0.12, D, wh, 0, 0, 0, 0.02);
+    rb(g, W, H, t, wh, 0, 0, D / 2 - t / 2, 0.03);
+    rb(g, W, H, t, wh, 0, 0, -D / 2 + t / 2, 0.03);
+    for (const s of [-1, 1]) rb(g, t, H, D, wh, s * (W / 2 - t / 2), 0, 0, 0.03);
+    rb(g, W - 2 * t, 0.36, D - 2 * t, pm(0x9fc4d4, 0.05), 0, 0.12, 0, 0.04);   // お湯
+    cy(g, 0.03, 0.03, 0.06, ME(), W / 2 - 0.12, H, -D / 2 + 0.04, 10);
+  },
+  // 洗面台（下に収納・上に鏡の収納）。壁が -z
+  basin(g, W, D, H) {
+    const wh = pm(0xf2efe8, 0.4), top = pm(0xf8f8f6, 0.2), hh = Math.min(0.78, H - 0.06);
+    rb(g, W, hh - 0.08, D - 0.03, wh, 0, 0.08, -0.015, 0.01);
+    rb(g, W - 0.04, 0.08, D - 0.08, pm(0x6a6560, 0.8), 0, 0, -0.04, 0);
+    for (const s of [-1, 1]) { rb(g, W / 2 - 0.006, hh - 0.1, 0.012, wh, s * W / 4, 0.09, D / 2 - 0.02, 0.006); rb(g, 0.012, 0.1, 0.012, ME(), s * 0.03, hh - 0.2, D / 2 - 0.005, 0.004); }
+    rb(g, W, 0.06, D, top, 0, hh, 0, 0.015);
+    sp(g, Math.min(0.2, W * 0.34), 0.012, D * 0.3, pm(0xdfe5e8, 0.15), 0, hh + 0.06, 0.03, 24);
+    tb(g, [0, hh + 0.06, -D / 2 + 0.07], [0, hh + 0.24, -D / 2 + 0.07], 0.014, ME()); tb(g, [0, hh + 0.24, -D / 2 + 0.07], [0, hh + 0.22, -D / 2 + 0.16], 0.012, ME());
+    rb(g, W, 0.7, 0.13, wh, 0, hh + 0.36, -D / 2 + 0.065, 0.01);
+    rb(g, W - 0.04, 0.62, 0.004, pm(0xd5dde2, 0.05, 0.9), 0, hh + 0.4, -D / 2 + 0.131, 0);
+  },
 };
 // 形のある物を作る。作れたら true
-export function buildModel(id, g, W, D, H) {
+export function buildModel(id, g, W, D, H, o) {
   const f = MODELS[id]; if (!f) return false;
-  seed = 7; f(g, W, D, H); return true;
+  seed = 7; f(g, W, D, H, o); return true;
 }
 
 // ---- 動かない部品を、材料ごとに1つの形にまとめる（userData.dyn の付いたグループの中は動くので残す）----

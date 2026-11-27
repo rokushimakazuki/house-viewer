@@ -427,7 +427,8 @@ const UNITS = [
       [0, 'ゴルフバッグ', 1, 'golf', 0.3, 1.2, 0.3, 0x2b2b2d, 1.22], [0, 'スノーボード', 1, 'snow', 0.05, 1.45, 0.28, 0xc0392b, 1.58],
       [1, 'キャンプ用品の大きな箱 2つ', 2, 'cont', 0.52, 0.35, 0.45, CB], [2, 'ランタン・小物（箱）', 2, 'cont', 0.4, 0.25, 0.35, 0x5a6e7f]],
     note: '幅1.8m×奥行0.75m×高さ1.6m の物置を想定。引き戸は片側ずつ開く。場所は外構と合わせて決める' },
-  { id: 'bike', name: '自転車（外）', lv: 'G', r: [1010, 300, 1080, 480], h: [0, 1.0], f: 'W', kind: 'item', col: 0x5a5a5a },
+  { id: 'bikes', name: '自転車 4台（北側・斜めに止める）', lv: 'G', r: [290, -133, 790, -5], h: [0, 1.0], f: 'S', kind: 'item', col: 0x5a5a5a,
+    note: '家の北の壁と北の境界の間（約1.3m）に、30°ななめに4台。子ども乗せ電動・シティサイクル・子どもの自転車・クロスバイクを仮に置いた。北の窓・給湯器・エアコンの室外機の位置と合わせて決める' },
 ];
 
 // 影（AO）の計算のときは名札（Sprite）と半透明の箱を外す。入れたままだと名札が真っ黒に写る（パソコンで AO が入っているとき）
@@ -582,7 +583,26 @@ function buildLeaf(u, FL1) {
   const kb = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.02, 0.12), SM.knob); kb.position.set(0.03, 1.0 - d.h0, -L + 0.08); pv.add(kb);
   storeGroup.add(tag(pv, u.id)); u.pivot = pv;
 }
+// ---- 設備・ベッド（家のモデルでは 'fixture' の箱。ビューアでは隠して、ここで形のある物を出す）----
+// [形, 階, x, y, 幅, 奥行, 高さ(cm), 向き(rad・プランシートと同じ), 追加]
+const FIX = [
+  ['washer', '2', 52.5, 412.5, 65, 65, 105, 4.712389], ['basin', '2', 35.5, 315, 60, 55, 90, 4.712389],
+  ['toilet', '2', 136, 48, 40, 80, 62, 0], ['bath', '2', 352.5, 97.5, 155, 85, 60, 1.5707964],
+  ['bed', '2', 832.5, 65, 100, 205, 45, 4.712389, { col: 0xb7c7dd }], ['bed', '2', 832.5, 170, 100, 205, 45, 4.712389, { col: 0xd8d2c4 }],
+  ['bed', '2', 832.5, 275, 100, 205, 45, 4.712389, { col: 0x9fb5a0 }], ['bed', '2', 568.5, 65, 100, 205, 45, 4.712389, { col: 0xe8c9b8 }],
+  ['bed', '2', 526, 527.5, 100, 205, 45, 0, { col: 0xc9c9d6 }],
+  ['toilet', '1', 48, 500, 40, 80, 62, 4.712389], ['basin', '1', 33, 410, 60, 50, 85, 4.712389],   // 1階のトイレ・手洗い（今までモデルに無かった）
+];
+function addFixtures(furn, FL1) {
+  const fg = new THREE.Group(); fg.name = 'fixtures';
+  for (const [t, lv, x, y, w, d, h, a, o] of FIX) {
+    const g = new THREE.Group(); g.position.set(PX(x), FL1 + LV[lv], PZ(y)); g.rotation.y = -a;
+    buildModel(t, g, w / 100, d / 100, h / 100, o); bake(g); fg.add(g);
+  }
+  furn.add(fg);
+}
 export function addStorage(furn, FL1) {
+  addFixtures(furn, FL1);
   for (const u of UNITS) {
     byId[u.id] = u; u.labels = []; u.cur = [0, 0]; u.tgt = [0, 0]; u.n = 1;
     const [x0, y0, x1, y1] = u.r, [h0, h1] = u.h, ns = u.f === 'N' || u.f === 'S';
@@ -605,6 +625,7 @@ export function addStorage(furn, FL1) {
 // ---- 家のモデル側の物とつなぐ（モデルを読み直したときにも）：収納(1)の扉を回せるようにし、材料の見た目を合わせる ----
 function hookModel() {
   const d = window._dbg; if (!d) return;
+  d.rig.traverse((o) => { if (o.isMesh && o.material && o.material.name === 'fixture') o.visible = false; });   // 設備・ベッドの箱は隠す（形のある物を出している）
   const byMat = {};
   d.rig.traverse((o) => { if (o.isMesh && o.material && o.material.name && !o.userData.storeId && !byMat[o.material.name]) byMat[o.material.name] = o.material; });
   // 収納(1)：家のモデルの扉（washdoor）と取っ手（washknob）を、蝶番（北の端・和室側の面）を軸に回す
