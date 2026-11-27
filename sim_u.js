@@ -27,7 +27,7 @@ const N = {
   toil2_d: [278, 285, FL2, '2階トイレの前'], toil2: [335, 227, FL2, '2階トイレ'],
   yo2_d: [455, 280, FL2, '洋室2'], yo2: [520, 160, FL2, '洋室2'], yo2_chest: [550, 200, FL2, '洋室2（子どもの服）'],
   yo3_d: [690, 316, FL2, '洋室3'], yo3: [710, 200, FL2, '洋室3（寝室）'],
-  bed1: [800, 65, FL2 + 0.45, '洋室3（寝室）'], bed2: [800, 170, FL2 + 0.45, '洋室3（寝室）'], bed3: [800, 275, FL2 + 0.45, '洋室3（寝室）'],
+  bed1: [755, 65, FL2 + 0.45, '洋室3（寝室）'], bed2: [755, 170, FL2 + 0.45, '洋室3（寝室）'], bed3: [755, 275, FL2 + 0.45, '洋室3（寝室）'],   // 足元の位置（まくらは東）
   yo1_d: [360, 350, FL2, '洋室1'], yo1: [450, 470, FL2, '洋室1'],
   laundry_d: [140, 500, FL2, 'ランドリー'], laundry: [100, 420, FL2, 'ランドリー'], wic_d: [95, 560, FL2, 'WIC'], wic: [90, 700, FL2, 'WIC'],
 };
@@ -306,7 +306,7 @@ function update() {
     // 向き：歩いている方向
     if (q.walking) { const nx = posAt(P, p.id, t + 0.05); const dx = PX(nx.x) - PX(q.x), dz = PZ(nx.y) - PZ(q.y); if (Math.hypot(dx, dz) > 1e-4) f.rotation.y = Math.atan2(dx, dz); }
     f.rotation.x = 0; f.rotation.z = q.lying && !p.baby ? Math.PI / 2 : 0;
-    if (q.lying && !p.baby) { f.position.y += 0.15; f.position.x -= 0.0; f.rotation.y = -Math.PI / 2; }
+    if (q.lying && !p.baby) { f.position.y += 0.15; f.rotation.y = Math.PI; }   // 寝ている人は頭が東（まくらの側）
     const act = q.seg.act, top = state.view !== 'in', txt = top ? p.name.replace(/（.*/, '') : p.name.replace(/（.*/, '') + '：' + act;
     if (state.labels[p.id] !== txt) {
       if (f.userData.lab) f.remove(f.userData.lab);
