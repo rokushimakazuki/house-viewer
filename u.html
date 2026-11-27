@@ -1067,10 +1067,11 @@ function updateInside(dt) {
   }
 }
 
-window._dbg = { renderer, drawHud, hudCanvas, postureOf, ext, makeSheet, vpCamera, renderFrame, updateSee, sunDir, setVariant, setHeight, goVP, sunState, setHour, applySun, placeSun, composer, furn, enterInside, exitInside, inside, rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
+window._dbg = { orbit, renderer, drawHud, hudCanvas, postureOf, ext, makeSheet, vpCamera, renderFrame, updateSee, sunDir, setVariant, setHeight, goVP, sunState, setHour, applySun, placeSun, composer, furn, enterInside, exitInside, inside, rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
 let hudTimer = 0;
 function drawHudThrottled() { const n = performance.now(); if (n - hudTimer > 150) { hudTimer = n; drawHud(); } }
 </script>
 <script type="module" src="design_u.js"></script>
+<script type="module" src="sim_u.js"></script>
 </body>
 </html>
