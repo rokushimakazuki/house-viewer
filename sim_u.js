@@ -218,6 +218,11 @@ const css = `
 #simbox .sub{color:#b8bcc0;font-size:12px}
 #simbox table{border-collapse:collapse;width:100%;font-size:12.5px}#simbox td,#simbox th{border-bottom:1px solid #444;padding:3px 4px;text-align:left}
 #simbox input[type=range]{width:100%}
+#simind{position:fixed;left:0;top:0;width:100%;height:100%;z-index:55;pointer-events:none;display:none}
+#simind .ind{position:absolute;left:0;top:0;pointer-events:auto;cursor:pointer;touch-action:manipulation;display:flex;align-items:center;gap:4px;white-space:nowrap;background:rgba(255,255,255,.9);color:#222;border-radius:10px;padding:2px 8px 2px 3px;font:600 12px/1.35 "Hiragino Sans","Yu Gothic",sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.35);border-left:5px solid}
+#simind .ind .tg{font-weight:400;color:#555;font-size:11px}
+#simind .ind .ar{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid;flex:none}
+#simind .ind.pin{opacity:.85}
 `;
 let state = null;
 function el(html) { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; }
@@ -237,12 +242,15 @@ function build() {
     <details id="simres"><summary><b>結果（歩いた距離・混み合い）</b></summary><div id="simresb"></div><div class="sub" id="simguess" style="margin-top:6px"></div></details>
   </div></div>`);
   document.body.append(box);
+  // 見えない人の名札（ほかの階・画面の外・後ろ）。家の絵の上か画面の端に小さく出す
+  const ind = el('<div id="simind"></div>'); document.body.append(ind);
+  for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'wheel']) ind.addEventListener(ev, (e) => { if (e.target !== ind) e.stopPropagation(); });
   const root = new THREE.Group(); root.name = 'sim'; d.furn.add(root);
   const FL1 = 0.59;
   const figs = {}, labels = {};
   for (const p of PEOPLE) { const f = figure(p); root.add(f); figs[p.id] = f; }
   const trails = new THREE.Group(); root.add(trails);
-  state = { d, box, root, figs, labels, trails, sc: 'am', t: 0, play: false, view: 'auto', sel: 'mama', last: 0, FL1, P: null, res: null };
+  state = { d, box, ind, chips: {}, root, figs, labels, trails, sc: 'am', t: 0, play: false, view: 'auto', sel: 'mama', last: 0, FL1, P: null, res: null };
   const $ = (q) => box.querySelector(q);
   // 板の上の操作が、下の 3D（指で回す・タップで色選び）に伝わらないようにする
   for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'wheel']) box.addEventListener(ev, (e) => e.stopPropagation());
@@ -254,6 +262,9 @@ function build() {
   $('#simt').oninput = () => { const S = SCEN[state.sc]; state.t = tmin(S.t0) + (tmin(S.t1) - tmin(S.t0)) * $('#simt').value / 100; update(); };
   $('#simtrail').onchange = () => { trails.visible = $('#simtrail').checked; inval(); };
   for (const b of box.querySelectorAll('[data-view]')) tap(b, () => { state.view = b.dataset.view; for (const x of box.querySelectorAll('[data-view]')) x.classList.toggle('on', x === b); applyView(true); update(); });
+  tap(ind, (e) => { const x = e.target.closest && e.target.closest('.ind'); if (!x) return; state.sel = x.dataset.id;
+    if (state.view === '1' || state.view === '2') { state.view = 'auto'; for (const b of box.querySelectorAll('[data-view]')) b.classList.toggle('on', b.dataset.view === 'auto'); }   // 階を決めて見ているときは「自動」に戻し、その人の階へ
+    applyView(true); update(); });   // 札をタップ＝その人を追いかける
   return state;
 }
 // タップ：指を離した時点で動かす（iPad では、時計が毎コマ書き換わっていると click が届かないことがあるため）。
@@ -340,7 +351,7 @@ function applyView(force) {
   }
   if (!force && floor === lastFloor) return;
   lastFloor = floor; state.floor = floor;
-  if (d.inside.on) d.exitInside();
+  if (d.inside.on) { d.exitInside(); const ui = document.getElementById('ui'); if (ui) ui.style.display = 'none'; }   // 中から戻ったときも説明の板は隠したまま
   const base = state.FL1 + (floor === 2 ? FL2 : 0);
   const c = d.furn.localToWorld(new THREE.Vector3(PX(477.75), base, PZ(409.5)));
   const cut = d.furn.localToWorld(new THREE.Vector3(0, base + 2.1, 0)).y;
@@ -351,6 +362,83 @@ function applyView(force) {
     d.camera.position.set(c.x - sx, c.y + 10 * k, c.z + 5 * k - sh); d.orbit.target.set(c.x - sx, c.y, c.z - sh); d.orbit.update();
   }
   inval();
+}
+// ---- 見えない人の札 ----
+// その人の 3D の名札が画面に見えていないとき（上から見ていてほかの階にいる・画面の外・中から見て後ろ側・左上の板の下）に出す。
+// ほかの階の人は、見ている階の同じ位置（真上・真下）に「2階」などの札を出す。画面の外の人は、その方向の画面の端に矢印つきで出す
+const _v = new THREE.Vector3(), _c = new THREE.Vector3();
+function indLoop() {
+  if (!state || state.box.style.display === 'none') { if (state) state.indRun = false; return; }
+  drawInd(); requestAnimationFrame(indLoop);
+}
+function drawInd() {
+  const d = state.d, cam = d.camera, ind = state.ind;
+  if (d.renderer.xr && d.renderer.xr.isPresenting) { ind.style.display = 'none'; return; }
+  ind.style.display = 'block';
+  const W = innerWidth, H = innerHeight, top = state.view !== 'in';
+  cam.updateMatrixWorld(); d.furn.updateMatrixWorld();
+  const box = state.box.getBoundingClientRect();
+  const bar = document.getElementById('bar'), br = bar && getComputedStyle(bar).display !== 'none' ? bar.getBoundingClientRect() : null;
+  const yMax = (br && br.height > 0 && br.top > H * 0.3 ? br.top : H) - 16;   // 中から見るときの下の操作の上まで
+  const A = { l: 60, r: W - 60, t: 16, b: yMax }, cx = (A.l + A.r) / 2, cy = (A.t + A.b) / 2;
+  const babyHeld = state.P && posAt(state.P, 'baby', state.t).carried, put = [];
+  for (const p of PEOPLE) {
+    const q = posAt(state.P, p.id, state.t), f = state.figs[p.id];
+    let c = state.chips[p.id];
+    if (!c) { c = state.chips[p.id] = el(`<div class="ind" data-id="${p.id}"><span class="ar"></span><span class="nm"></span><span class="tg"></span></div>`); c.style.borderLeftColor = '#' + p.col.toString(16).padStart(6, '0'); c.querySelector('.ar').style.borderBottomColor = c.style.borderLeftColor; ind.append(c); }
+    const hide = () => { if (c.style.display !== 'none') c.style.display = 'none'; };
+    if (q.carried) { hide(); continue; }
+    const pf = q.h < -0.3 ? 0 : q.h > 1.6 ? 2 : 1;   // 0＝家の外
+    const shown = f.visible && f.userData.lab && f.userData.lab.visible;
+    // 札を出す目標の点：見えている人は名札の位置、ほかの階の人は見ている階の同じ平面位置
+    if (shown) f.userData.lab.getWorldPosition(_v);
+    else d.furn.localToWorld(_v.set(PX(q.x), state.FL1 + (state.floor === 2 ? FL2 : 0) + 1.2, PZ(q.y)));
+    _c.copy(_v).applyMatrix4(cam.matrixWorldInverse); const behind = _c.z > -0.05;
+    _v.project(cam);
+    let x = (_v.x + 1) / 2 * W, y = (1 - _v.y) / 2 * H;
+    const inView = !behind && x >= 8 && x <= W - 8 && y >= 8 && y <= H - 8;
+    const underBox = inView && ((x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) || y > yMax);   // 左上の板・下の操作の陰
+    if (shown && inView && !underBox) { hide(); continue; }   // 3D の名札が見えている
+    // 札の文字：名前＋（ほかの階なら）階＋部屋
+    const where = N[q.walking ? q.on[1] : (q.seg.node === 'mom' ? 'kitchen' : q.seg.node)];
+    const room = (where ? where[3] : '').replace(/（.*/, '');
+    const curF = top ? state.floor : (d.furn.worldToLocal(cam.getWorldPosition(_c)).y - state.FL1 > 2.6 ? 2 : 1);   // 中から見るときは、目のある階
+    const fl = pf === 0 ? '外' : pf !== curF ? pf + '階' : '';
+    const nm = p.name.replace(/（.*/, '') + (p.id === 'mama' && babyHeld ? '・赤ちゃん' : '');
+    const tg = (fl && !room.startsWith(fl) ? fl + ' ' : '') + (q.walking ? '→' : '') + room;
+    const key = nm + '|' + tg;
+    if (c.dataset.k !== key) { c.querySelector('.nm').textContent = nm; c.querySelector('.tg').textContent = tg; c.dataset.k = key; }
+    let ang = null;   // 矢印の向き（画面の端に出すとき）
+    if (!inView || underBox) {
+      // 画面の中心から目標への方向に、端まで寄せる（後ろ側は向きを反転）
+      let dx = (_v.x) * (behind ? -1 : 1), dy = (-_v.y) * (behind ? -1 : 1);
+      if (behind && Math.hypot(dx, dy) < 1e-3) dy = 1;
+      const mx = (A.r - A.l) / 2 - 10, my = (A.b - A.t) / 2 - 10;
+      const s = Math.min(mx / Math.max(1e-6, Math.abs(dx * W / 2)), my / Math.max(1e-6, Math.abs(dy * H / 2)));
+      if (!inView) { x = cx + dx * W / 2 * s; y = cy + dy * H / 2 * s; }
+      ang = Math.atan2(dy * H, dx * W);
+    }
+    // 左上の板・下の操作に重ならないようにずらす
+    x = Math.max(A.l, Math.min(A.r, x)); y = Math.max(A.t, Math.min(A.b, y));
+    if (x >= box.left - 50 && x <= box.right + 50 && y >= box.top - 14 && y <= box.bottom + 14) {
+      if (box.right + 60 < W - 60 && (box.right - x < box.bottom - y || box.bottom + 20 > yMax)) x = box.right + 60; else y = box.bottom + 16;
+    }
+    c.classList.toggle('pin', ang === null);
+    const ar = c.querySelector('.ar');
+    if (ang === null) { ar.style.display = 'none'; } else { ar.style.display = ''; ar.style.transform = `rotate(${(ang * 180 / Math.PI + 90).toFixed(0)}deg)`; }
+    c.style.display = 'flex';
+    put.push({ c, x, y, w: c.offsetWidth + 4, h: c.offsetHeight + 3 });
+  }
+  // 札どうしが重なるときは、下へずらす（同じ部屋に何人もいるとき）
+  // 画面の上半分にある札は下へ、下半分にある札は上へずらす（端からはみ出さないように）
+  for (const up of [false, true]) {
+    const g = put.filter((o) => (o.y > cy) === up).sort((a, b) => up ? b.y - a.y : a.y - b.y);
+    for (let i = 0; i < g.length; i++) for (let j = 0; j < i; j++) {
+      const a = g[j], b = g[i];
+      if (Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.y - b.y) < (a.h + b.h) / 2) { b.y = a.y + (up ? -1 : 1) * (a.h + b.h) / 2; j = -1; }
+    }
+  }
+  for (const o of put) o.c.style.transform = `translate(${o.x.toFixed(0)}px,${o.y.toFixed(0)}px) translate(-50%,-50%)`;
 }
 function loop() {
   if (!state || !state.play) return;
@@ -367,10 +455,11 @@ function open() {
   const ui = document.getElementById('ui'); if (ui) { state.uiDisp = ui.style.display; ui.style.display = 'none'; }   // スマホで重ならないように、説明の板は隠す
   window._design && window._design.closePop && window._design.closePop(); window._store && window._store.closePop && window._store.closePop();   // 下に出ている色選び・収納の板は閉じる
   if (!state.P) load('am'); else applyView(true);
+  if (!state.indRun) { state.indRun = true; requestAnimationFrame(indLoop); }
 }
 function close() {
   const ui = document.getElementById('ui'); if (ui && !state.d.inside.on) ui.style.display = state.uiDisp || '';
-  state.play = false; state.box.style.display = 'none'; state.root.visible = false; state.d.renderer.clippingPlanes = []; lastFloor = null; inval();
+  state.play = false; state.box.style.display = 'none'; state.root.visible = false; state.ind.style.display = 'none'; state.d.renderer.clippingPlanes = []; lastFloor = null; inval();
 }
 // ボタンを置く（外から見るときの左の板と、中から見るときの下の操作）
 function addButtons() {
