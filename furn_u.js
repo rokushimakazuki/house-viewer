@@ -2,6 +2,7 @@
 // 以前は革張りのソファ・椅子のモデルを使っていたが、一般的な布張りのものに替えた（11/20 六嶋さん）。
 // 位置は平面図の cm（原点＝建物の北西の角）。向き a は FURN と同じ決め方（0＝南を向く）
 import * as THREE from 'three';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 
 const PX = (x) => (x - 477.75) / 100, PZ = (y) => (y - 409.5) / 100;
 const fabric = (col) => new THREE.MeshStandardMaterial({ color: col, roughness: 1.0, metalness: 0 });
@@ -319,48 +320,143 @@ setInterval(() => {
 drawScreen(0);
 window._tv.setTVOn = setTVOn; window._tv.drawScreen = drawScreen;
 
-// ---- 収納の中身（11/27 六嶋さんと決めた配置）。半透明の箱と名札で表す。「収納の中身」ボタンで出し入れ ----
+
+// ---- 収納（11/27 六嶋さんと決めた配置）。タップすると扉・引き出し・ふたが開いて、中身と名札が見える ----
 // 位置は平面図の cm（原点＝建物の北西の角）、高さは m。lv：'1'＝1階の床、'2'＝2階の床（+3.00）、'L'＝ロフトの床（+4.05）、'G'＝地面（−0.59）
+// f：正面（手前）の向き。S＝南、N＝北、E＝東、W＝西。kind：
+//   shelf＝扉のない棚（中身は最初から見える。タップで名札）／drawers＝引き出し（タップで引き出す）／boxes＝ふた付きの箱（ふたが開く）
+//   shed＝物置（引き戸）／item＝物そのもの（半透明の箱）。door：別に開き戸がある（leaf＝ここで作る、glb＝家のモデルの扉を回す）
+// 棚の中身 it：[段, 名札, 個数, 形, 幅, 高さ, 奥行, 色, 左端からの位置(m・省略可)]。形 b＝箱、c＝立てた円柱、cl＝寝かせた円柱
 const LV = { '1': 0, '2': 3.0, 'L': 4.05, 'G': -0.59 };
-const STORE = [
-  // 1階 シューズクローク
-  ['1', 288, 10, 316, 220, 0, 2.0, 0x4f7fb0, '靴 約30足＋子どもの靴・長靴（棚7段・約45足分）'],
-  ['1', 190, 20, 260, 120, 0, 1.0, 0x4f7fb0, 'ベビーカー・キャンプ用カート'],
-  ['1', 190, 130, 260, 220, 0, 0.9, 0x4f7fb0, 'ボール・外遊びのおもちゃ・傘'],
-  // 1階 収納(2)・収納(1)
-  ['1', 4, 550, 132, 633, 0, 2.0, 0x6b8f5e, '日用品ストック・掃除機・救急箱・充電器'],
-  ['1', 231, 550, 315, 633, 0, 1.3, 0x6b8f5e, '来客用マットレス1〜2枚・布団（階段下）'],
-  // 書斎
-  ['1', 10, 760, 130, 815, 0, 0.72, 0x8a6aa8, '机（新しく買う）'],
-  ['1', 10, 643, 100, 678, 0, 1.8, 0x8a6aa8, '書類ファイル（棚）'],
-  ['1', 185, 650, 220, 780, 0, 1.25, 0x8a6aa8, 'トレーニングベンチ（立てて）・ダンベル'],
-  // キッチン
-  ['1', 605, 10, 854, 58, 0.9, 1.3, 0xc07a3a, 'レンジ・炊飯器・トースター・電気ケトル（カップボードの上）'],
-  ['1', 605, 10, 854, 58, 0.08, 0.85, 0xc07a3a, '食器・保存容器・子どもの食器（今の吊戸棚の中身）'],
-  ['1', 868, 10, 951, 56, 0, 2.0, 0xc07a3a, 'ホームベーカリー・ホットプレート・グリル鍋・食品ストック（可動棚）'],
-  // 和室（遊び場）
-  ['1', 325, 460, 365, 545, 0.3, 1.1, 0xd0a030, 'おもちゃ棚・絵本ラック'],
-  ['1', 325, 380, 365, 455, 0.3, 1.2, 0xd0a030, 'おままごとキッチン'],
-  ['1', 440, 450, 580, 620, 0.3, 1.5, 0xd0a030, 'すべり台・ブランコ（折りたたみ）'],
-  ['1', 380, 590, 440, 630, 0.3, 0.5, 0xd0a030, '折りたたみマット'],
-  // 2階 WIC
-  ['2', 8, 762, 265, 815, 0.85, 1.75, 0xb05a6a, '掛ける服（家族全員・約2.5m）※ぎりぎり'],
-  ['2', 8, 762, 265, 815, 0, 0.8, 0xb05a6a, '引き出しケース 約8段'],
-  ['2', 70, 643, 265, 688, 0, 1.8, 0xb05a6a, 'バッグ・帽子・小物（棚）'],
-  // 2階 ランドリー・子ども部屋
-  ['2', 5, 520, 40, 632, 0, 1.8, 0x3f9a9a, 'タオル・洗剤ストック・洗濯ネット'],
-  ['2', 420, 210, 560, 268, 0, 1.3, 0x3f9a9a, '子どもの服（引き出し・ハンガーラック）'],
-  // ロフト
-  ['L', 700, 380, 800, 440, 0, 0.6, 0x7a6f60, 'ひな人形・五月人形'],
-  ['L', 820, 380, 940, 420, 0, 0.3, 0x7a6f60, 'クリスマスツリー（箱）'],
-  ['L', 700, 560, 800, 625, 0, 0.6, 0x7a6f60, '写真の段ボール・手芸用品'],
-  ['L', 820, 560, 940, 625, 0, 0.6, 0x7a6f60, '季節外の服（衣装ケース）'],
-  ['L', 860, 450, 940, 540, 0, 0.5, 0x7a6f60, '軽いキャンプ道具（イス・マット）'],
-  // 外（物置は仮の位置：東の隣地との間）
-  ['G', 1005, 100, 1080, 280, 0, 1.6, 0x5a5a5a, '物置（外）：テント・テーブル・クーラー・箱2・ゴルフ・スノーボード'],
-  ['G', 1010, 300, 1080, 480, 0, 1.0, 0x5a5a5a, '自転車（外）'],
+const CB = 0xb08a5a;   // 段ボールの色
+const SHOE = [0x2b2b2d, 0xe9e7e2, 0x6b4a33, 0x3a4c6b, 0x8d8f92, 0xb5523b, 0x1e1e1f, 0xcfc7b8];
+const KID = [0xe07a5f, 0x81b29a, 0xf2cc8f, 0x5fa8d3, 0xd77fa1];
+const UNITS = [
+  // ---- 1階 シューズクローク（東の壁ぞいの棚 7段・扉なし）----
+  { id: 'shoe', name: 'シューズクロークの棚', lv: '1', r: [288, 10, 316, 220], h: [0, 2.0], f: 'W', kind: 'shelf', col: 0x4f7fb0,
+    b: [0, 0.32, 0.56, 0.80, 1.04, 1.30, 1.60],
+    it: [[0, '長靴・子どもの長靴', 5, 'b', 0.18, 0.28, 0.25, [0x2d4a3a, 0x3a3a3a, 0xd9b21f, 0x2c5d9e, 0xc04848]],
+      [1, '大人の靴（スニーカー）', 8, 'b', 0.2, 0.11, 0.27, SHOE], [2, '大人の靴（スニーカー）', 8, 'b', 0.2, 0.11, 0.27, SHOE.slice(3).concat(SHOE)],
+      [3, '大人の靴（革靴・パンプス）', 8, 'b', 0.2, 0.12, 0.27, [0x1e1e1f, 0x5a3a28, 0x2b2b2d, 0x8a6a4a]], [4, '大人の靴（サンダルなど）', 6, 'b', 0.22, 0.09, 0.27, SHOE],
+      [5, '子どもの靴', 10, 'b', 0.14, 0.08, 0.18, KID], [6, 'シーズン外の靴（箱）', 5, 'b', 0.33, 0.12, 0.22, CB]],
+    note: '大人 約30足＋子ども10足＋長靴5足 ＝ 約45足分。棚は7段（扉なし）' },
+  { id: 'stroller', name: 'ベビーカー・キャンプ用カート', lv: '1', r: [190, 15, 270, 90], h: [0, 1.0], f: 'S', kind: 'item', col: 0x4f7fb0, note: 'たたんで置く。玄関からの通り道（y 141〜223）はあけておく' },
+  { id: 'balls', name: 'ボール・外遊びのおもちゃ・傘', lv: '1', r: [190, 95, 250, 135], h: [0, 0.9], f: 'S', kind: 'item', col: 0x4f7fb0, note: 'かごに入れて置く' },
+  // ---- 1階 収納(2)：ホール南から入る奥行 1.28m の小部屋。扉を付ける ----
+  { id: 'store2', name: '収納(2)', lv: '1', r: [6, 552, 130, 631], h: [0, 2.3], f: 'E', kind: 'shelf', col: 0x6b8f5e, sd: 0.45,
+    b: [0, 1.15, 1.5, 1.85],
+    it: [[0, '掃除機（立てて充電）', 1, 'b', 0.22, 1.1, 0.22, 0x8a8f94], [0, 'トイレットペーパー・ティッシュ', 1, 'b', 0.3, 0.45, 0.4, 0xeeeeea], [0, 'ストックの箱', 1, 'b', 0.24, 0.35, 0.38, CB],
+      [1, '救急箱', 1, 'b', 0.3, 0.18, 0.22, 0xd9d9d6], [1, '充電器・電池・電球の箱', 1, 'b', 0.3, 0.15, 0.3, 0x5a6e7f],
+      [2, '日用品ストック（洗剤など）', 3, 'b', 0.24, 0.25, 0.3, [0x7fb0d0, 0xe6e6e0, 0x9fc47e]], [3, '紙袋・使わない物', 2, 'b', 0.36, 0.25, 0.35, CB]],
+    door: { type: 'leaf', x: 136.5, y0: 555.5, y1: 627.5, h0: 0, h1: 2.0, sync: 'door' },
+    note: '入口はホール南の側（幅約73cm）。奥（西）に棚、手前は掃除機などを置く' },
+  // ---- 1階 収納(1)：回り階段の下。和室から開ける押入れ（家のモデルの扉を回す）----
+  { id: 'store1', name: '収納(1)（階段下）', lv: '1', r: [233, 552, 314, 631], h: [0, 1.4], f: 'E', kind: 'shelf', col: 0x6b8f5e,
+    b: [0],
+    it: [[0, '来客用マットレス 2枚（三つ折りを立てて）', 2, 'b', 0.24, 0.97, 0.65, 0xe9e3d5], [0, '掛け布団・まくら（圧縮袋）', 1, 'b', 0.26, 0.5, 0.6, 0x9db0c4]],
+    door: { type: 'glb', mat: 'washdoor', knob: 'washknob' },
+    note: '【計算】中は約81×79cm・高さ1.40m。三つ折りマットレス（約97×65cm）は寝かせると入らないので、立てて入れる（高さ97cm＜1.40m）' },
+  // ---- 書斎 ----
+  { id: 'desk', name: '机（新しく買う）', lv: '1', r: [10, 760, 130, 815], h: [0, 0.72], f: 'N', kind: 'item', col: 0x8a6aa8 },
+  { id: 'files', name: '書類の棚', lv: '1', r: [10, 643, 100, 678], h: [0, 1.8], f: 'S', kind: 'shelf', col: 0x8a6aa8,
+    b: [0, 0.38, 0.76, 1.14, 1.52],
+    it: [[0, '書類ファイル（家・車・保険）', 6, 'b', 0.1, 0.32, 0.28, [0x3a5a8c, 0x3a5a8c, 0x8c3a3a, 0x3a7a5a, 0xd0c8b0, 0x555]], [1, '書類ファイル（仕事）', 6, 'b', 0.1, 0.32, 0.28, [0x444, 0x666, 0x888]],
+      [2, '取扱説明書・保証書', 5, 'b', 0.1, 0.3, 0.26, [0xd8d4c8, 0xb8c8d8]], [3, '本', 3, 'b', 0.22, 0.24, 0.18, [0x9a6a4a, 0x4a6a8a, 0xc8b070]], [4, '思い出の物（小さな箱）', 2, 'b', 0.3, 0.2, 0.25, CB]] },
+  { id: 'bench', name: 'トレーニングベンチ（立てて）・ダンベル', lv: '1', r: [185, 685, 220, 815], h: [0, 1.25], f: 'W', kind: 'item', col: 0x8a6aa8, note: '入口（北の壁の東より）にかからないよう、南に寄せた' },
+  // ---- キッチン ----
+  { id: 'cuptop', name: 'カップボード（上の家電・下の引き出し）', lv: '1', r: [603, 8, 856, 60], h: [0.88, 1.3], f: 'S', kind: 'shelf', col: 0xc07a3a,
+    b: [0],
+    it: [[0, '電気ケトル', 1, 'c', 0.17, 0.23, 0.17, 0x2f3032, 0.25], [0, 'トースター', 1, 'b', 0.36, 0.22, 0.27, 0xe6e3dc, 0.6], [0, '炊飯器', 1, 'c', 0.27, 0.24, 0.3, 0xefefed, 1.25], [0, '電子レンジ', 1, 'b', 0.5, 0.3, 0.4, 0x2b2c2e, 1.85]] },
+  { id: 'cupboard', name: 'カップボード（引き出し）', lv: '1', r: [603, 8, 856, 60], h: [0, 0.85], f: 'S', kind: 'drawers', col: 0xc07a3a, front: 'kitchen', fo: 0.002, nolabel: true,
+    cols: 5, rows: [[0.60, 0.83], [0.36, 0.60], [0.10, 0.36]],
+    dl: [['カトラリー', 0xc9c9c9], ['調理道具（おたまなど）', 0x6a6a6a], ['ラップ・ホイル・袋', 0xd8d8d0], ['子どもの食器', 0xf2a65a], ['お茶・コーヒー', 0x8a5a3a],
+      ['茶わん・汁わん', 0xeae6dc], ['小皿・取り皿', 0xf2f0ea], ['大皿', 0xe8e6e0], ['コップ・マグ', 0x9fc7d8], ['保存容器', 0xdfe8ea],
+      ['鍋・フライパン', 0x3a3b3d], ['ボウル・ザル', 0xb9bcbf], ['保存容器（大）', 0xdfe8ea], ['食品のストック', 0xd9b36a], ['ゴミ袋・洗剤のストック', 0x7fb0d0]],
+    note: '吊戸棚をやめたので、今の吊戸棚の中身もここへ。引き出しの分け方は一例' },
+  { id: 'pantry', name: 'パントリーの可動棚（D45・4段）', lv: '1', r: [868, 10, 951, 56], h: [0, 2.0], f: 'S', kind: 'shelf', col: 0xc07a3a,
+    b: [0, 0.5, 0.95, 1.35, 1.75],
+    it: [[0, 'ホットプレート・グリル鍋（箱）', 2, 'b', 0.38, 0.22, 0.4, CB], [1, 'ホームベーカリー', 1, 'b', 0.28, 0.38, 0.38, 0xf1efe9], [1, 'お米', 1, 'b', 0.25, 0.38, 0.38, 0xdcdcdc],
+      [2, '食品ストック（かご）', 3, 'b', 0.25, 0.2, 0.35, 0xc8a878], [3, '食品ストック（かご）', 3, 'b', 0.25, 0.2, 0.35, 0xc8a878], [4, '紙皿・季節の調理器具', 2, 'b', 0.36, 0.18, 0.35, 0xd7d2c8]] },
+  // ---- 和室（遊び場）----
+  { id: 'toys', name: 'おもちゃ棚・絵本ラック', lv: '1', r: [325, 460, 365, 545], h: [0.3, 1.1], f: 'E', kind: 'shelf', col: 0xd0a030,
+    b: [0, 0.3, 0.56],
+    it: [[0, 'おもちゃ（かご）', 3, 'b', 0.26, 0.22, 0.3, KID], [1, '絵本', 3, 'b', 0.26, 0.23, 0.2, [0x5fa8d3, 0xf2cc8f, 0xe07a5f]], [2, 'ぬいぐるみ・小物', 3, 'b', 0.24, 0.18, 0.25, KID.slice(2)]] },
+  { id: 'kitchen_toy', name: 'おままごとキッチン', lv: '1', r: [325, 380, 365, 455], h: [0.3, 1.2], f: 'E', kind: 'item', col: 0xd0a030 },
+  { id: 'slide', name: 'すべり台・ブランコ（折りたたみ）', lv: '1', r: [440, 450, 580, 620], h: [0.3, 1.5], f: 'N', kind: 'item', col: 0xd0a030 },
+  { id: 'mat', name: '折りたたみマット', lv: '1', r: [375, 368, 435, 398], h: [0.3, 0.5], f: 'S', kind: 'item', col: 0xd0a030, note: '収納(1)の扉が開く範囲（扉から60cm）をあけた' },
+  // ---- 2階 WIC ----
+  { id: 'wicdr', name: 'WIC の引き出しケース', lv: '2', r: [10, 770, 262, 815], h: [0, 0.72], f: 'N', kind: 'drawers', col: 0xb05a6a, carcass: 'case', front: 'case',
+    cols: 4, rows: [[0.36, 0.72], [0, 0.36]],
+    dl: [['肌着・靴下（大人）', 0xe9e6e0], ['Tシャツ（大人）', 0x5a7a9a], ['ズボン（大人）', 0x3a4a5a], ['パジャマ（大人）', 0x9a8aa8],
+      ['子どもの肌着', 0xf2e2c8], ['子どもの服', 0xe07a5f], ['子どものズボン', 0x5fa8d3], ['タオルケット・季節の小物', 0xc8d8c0]],
+    note: '上に掛ける服（家族全員で約2.5m）。洋室にクローゼットが無いので、掛ける服はぎりぎり。引き出しの分け方は一例' },
+  { id: 'wicshelf', name: 'WIC の棚（バッグ・帽子）', lv: '2', r: [135, 643, 265, 683], h: [0, 1.8], f: 'S', kind: 'shelf', col: 0xb05a6a,
+    b: [0, 0.45, 0.9, 1.35],
+    it: [[0, '旅行かばん', 2, 'b', 0.45, 0.4, 0.3, [0x2b2b2d, 0x6a7a8a]], [1, 'バッグ', 4, 'b', 0.28, 0.3, 0.15, [0x8a5a3a, 0x2b2b2d, 0xc8b8a0, 0x4a5a6a]],
+      [2, '帽子・ベルト・小物（かご）', 3, 'b', 0.3, 0.2, 0.3, 0xc8a878], [3, 'シーズン外の小物（箱）', 3, 'b', 0.35, 0.25, 0.3, CB]],
+    note: '入口（北の壁の西より）にかからないよう、東に寄せた' },
+  // ---- 2階 ランドリー・子ども部屋 ----
+  { id: 'laundry', name: 'ランドリーの棚', lv: '2', r: [5, 520, 40, 632], h: [0, 1.8], f: 'E', kind: 'shelf', col: 0x3f9a9a,
+    b: [0, 0.4, 0.8, 1.2, 1.55],
+    it: [[0, '洗剤・柔軟剤のストック', 4, 'b', 0.2, 0.3, 0.12, [0x7fb0d0, 0xe6e6e0, 0xd0a0c0, 0x9fc47e]], [1, 'バスタオル', 3, 'b', 0.32, 0.3, 0.3, [0xf2f0ea, 0xd8e4ea, 0xe8dcc8]],
+      [2, 'フェイスタオル', 4, 'b', 0.24, 0.22, 0.3, [0xf2f0ea, 0xd8e4ea]], [3, '洗濯ネット・ハンガー（かご）', 2, 'b', 0.35, 0.2, 0.3, 0xc8a878], [4, '掃除用品のストック', 2, 'b', 0.35, 0.2, 0.3, CB]] },
+  { id: 'kidchest', name: '子どもの服（チェスト）', lv: '2', r: [510, 225, 590, 268], h: [0, 0.85], f: 'N', kind: 'drawers', col: 0x3f9a9a, carcass: 'chest', front: 'chest',
+    cols: 2, rows: [[0.64, 0.84], [0.43, 0.64], [0.22, 0.43], [0.02, 0.22]],
+    dl: [['肌着', 0xf2e2c8], ['靴下・小物', 0xe07a5f], ['Tシャツ', 0x5fa8d3], ['長そで', 0xf2cc8f], ['ズボン', 0x3a4a5a], ['スカート・半ズボン', 0xd77fa1], ['パジャマ', 0x9a8aa8], ['園・学校の物', 0x81b29a]],
+    note: '洋室2の入口（西より）にかからないよう、東に寄せた' },
+  { id: 'kidrack', name: '子どものハンガーラック（上着・園の服）', lv: '2', r: [600, 225, 660, 268], h: [0, 1.3], f: 'N', kind: 'item', col: 0x3f9a9a },
+  // ---- ロフト ----
+  { id: 'dolls', name: 'ひな人形・五月人形', lv: 'L', r: [700, 380, 800, 440], h: [0, 0.6], f: 'S', kind: 'boxes', col: 0x7a6f60,
+    bx: [['ひな人形', 0.45, 0.42, 0.45, CB, [['b', 0.12, 0.2, 0.1, 0xc0392b], ['b', 0.12, 0.2, 0.1, 0x2c3e70], ['b', 0.1, 0.1, 0.1, 0xe8d8b0]]],
+      ['五月人形', 0.42, 0.48, 0.45, CB, [['b', 0.14, 0.26, 0.12, 0x2b2b2d], ['c', 0.08, 0.2, 0.08, 0xc9a227]]]] },
+  { id: 'tree', name: 'クリスマスツリー（140cm）', lv: 'L', r: [820, 380, 940, 420], h: [0, 0.35], f: 'S', kind: 'boxes', col: 0x7a6f60,
+    bx: [['ツリー（たたんで）', 0.8, 0.3, 0.3, CB, [['cl', 0.7, 0.2, 0.2, 0x2f6b3a]]], ['オーナメント', 0.34, 0.28, 0.3, CB, [['c', 0.08, 0.08, 0.08, 0xc0392b], ['c', 0.08, 0.08, 0.08, 0xd4ac0d], ['c', 0.08, 0.08, 0.08, 0x2c7a9e]]]] },
+  { id: 'photos', name: '写真の段ボール・手芸用品', lv: 'L', r: [700, 560, 800, 625], h: [0, 0.6], f: 'N', kind: 'boxes', col: 0x7a6f60,
+    bx: [['写真・アルバム', 0.45, 0.35, 0.4, CB, [['b', 0.32, 0.25, 0.06, 0x6a4a3a], ['b', 0.32, 0.25, 0.06, 0x3a4a6a], ['b', 0.32, 0.25, 0.06, 0x8a7a5a]]],
+      ['手芸用品', 0.4, 0.3, 0.35, 0xdfe8ea, [['b', 0.1, 0.08, 0.1, 0xd77fa1], ['b', 0.1, 0.08, 0.1, 0x5fa8d3], ['c', 0.06, 0.08, 0.06, 0xf2cc8f]]]] },
+  { id: 'cases', name: '季節外の服（衣装ケース）', lv: 'L', r: [820, 560, 940, 625], h: [0, 0.6], f: 'N', kind: 'drawers', col: 0x7a6f60, carcass: 'case', front: 'case',
+    cols: 3, rows: [[0.3, 0.6], [0, 0.3]],
+    dl: [['冬服（大人）', 0x5a4a3a], ['冬服（大人）', 0x3a4a5a], ['冬服（子ども）', 0xe07a5f], ['夏服（大人）', 0xe9e6e0], ['夏服（子ども）', 0x5fa8d3], ['お下がり・次のサイズ', 0xf2cc8f]] },
+  { id: 'camp', name: '軽いキャンプ道具（イス・マット）', lv: 'L', r: [850, 440, 945, 545], h: [0, 0.3], f: 'W', kind: 'shelf', col: 0x7a6f60,
+    b: [0], it: [[0, 'キャンプ用のイス（収納袋）4脚', 4, 'b', 0.17, 0.17, 0.8, 0x3d5a40], [0, 'インフレータブルマット', 2, 'b', 0.14, 0.14, 0.6, 0x2c5d9e]] },
+  // ---- 外（物置は仮の位置：東の隣地との間）----
+  { id: 'shed', name: '物置（外・仮の位置）', lv: 'G', r: [1005, 100, 1080, 280], h: [0, 1.6], f: 'W', kind: 'shed', col: 0x5a5a5a,
+    b: [0, [0.8, 0, 0.65], [1.2, 0, 0.65]],
+    it: [[0, 'テント（収納袋）', 1, 'cl', 0.55, 0.26, 0.26, 0x3f5a3a], [0, 'クーラーボックス', 1, 'b', 0.45, 0.4, 0.33, 0x2f6db0], [0, '折りたたみテーブル', 1, 'b', 0.08, 0.6, 0.55, 0x9a9a96],
+      [0, 'ゴルフバッグ', 1, 'c', 0.3, 1.2, 0.3, 0x2b2b2d, 1.22], [0, 'スノーボード', 1, 'b', 0.05, 1.45, 0.28, 0xc0392b, 1.58],
+      [1, 'キャンプ用品の大きな箱 2つ', 2, 'b', 0.52, 0.35, 0.45, CB], [2, 'ランタン・小物（箱）', 2, 'b', 0.4, 0.25, 0.35, 0x5a6e7f]],
+    note: '幅1.8m×奥行0.75m×高さ1.6m の物置を想定。引き戸は片側ずつ開く。場所は外構と合わせて決める' },
+  { id: 'bike', name: '自転車（外）', lv: 'G', r: [1010, 300, 1080, 480], h: [0, 1.0], f: 'W', kind: 'item', col: 0x5a5a5a },
 ];
-function labelSprite(text, col) {
+
+// 影（AO）の計算のときは名札（Sprite）と半透明の箱を外す。入れたままだと名札が真っ黒に写る（パソコンで AO が入っているとき）
+{
+  const P = GTAOPass.prototype, ov = P.overrideVisibility;
+  P.overrideVisibility = function () { ov.call(this); this.scene.traverse((o) => { if (o.isSprite || o.userData.noAO) o.visible = false; }); };
+}
+// ---- 材料 ----
+const SM = {
+  board: new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.8 }),   // 棚板（白）
+  shed: new THREE.MeshStandardMaterial({ color: 0x7d8286, roughness: 0.55, metalness: 0.35 }),
+  shedDoor: new THREE.MeshStandardMaterial({ color: 0x9aa0a5, roughness: 0.5, metalness: 0.4 }),
+  shedIn: new THREE.MeshStandardMaterial({ color: 0x4a4d50, roughness: 0.8 }),
+  case: new THREE.MeshStandardMaterial({ color: 0xf4f4f2, roughness: 0.3, transparent: true, opacity: 0.72 }),   // 衣装ケース（半透明の白）
+  chest: new THREE.MeshStandardMaterial({ color: 0xd9cbb4, roughness: 0.6 }),
+  knob: new THREE.MeshStandardMaterial({ color: 0x2a2b2c, roughness: 0.5, metalness: 0.4 }),
+  tray: new THREE.MeshStandardMaterial({ color: 0xdedad2, roughness: 0.8 }),
+};
+const MC = {};
+const mat = (col) => MC[col] || (MC[col] = new THREE.MeshStandardMaterial({ color: col, roughness: 0.8 }));
+const ROT = { S: 0, N: Math.PI, E: Math.PI / 2, W: -Math.PI / 2 };   // 正面（ローカル +z）を東西南北に向ける
+
+function shape(t, w, h, d, col) {
+  let m;
+  if (t === 'c') m = new THREE.Mesh(new THREE.CylinderGeometry(w / 2, w / 2, h, 20), mat(col));
+  else if (t === 'cl') { const g = new THREE.CylinderGeometry(h / 2, h / 2, w, 20); g.rotateZ(Math.PI / 2); m = new THREE.Mesh(g, mat(col)); }
+  else m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(col));
+  m.position.y = h / 2; m.castShadow = m.receiveShadow = true; return m;
+}
+function labelSprite(text, col, h = 0.11, front = false) {
   const c = document.createElement('canvas'), g = c.getContext('2d'), fs = 36;
   g.font = `bold ${fs}px "Hiragino Sans","Yu Gothic",sans-serif`;
   const w = Math.min(1400, Math.ceil(g.measureText(text).width) + 40); c.width = w; c.height = fs + 28;
@@ -369,24 +465,244 @@ function labelSprite(text, col) {
   g.fillStyle = '#' + col.toString(16).padStart(6, '0'); g.fillRect(0, 0, 10, c.height);
   g.fillStyle = '#222'; g.textBaseline = 'middle'; g.fillText(text, 22, c.height / 2 + 1);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: true, transparent: true }));
-  const h = 0.11; s.scale.set(h * w / c.height, h, 1); s.userData.noOcc = true; return s;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: !front, transparent: true }));
+  if (front) s.renderOrder = 20;   // 中身の名札は、扉や壁に隠れないように手前に描く
+  s.scale.set(h * w / c.height, h, 1); s.userData.noOcc = true; return s;
 }
+const hexs = (c) => '#' + c.toString(16).padStart(6, '0');
+
+// ---- 組み立て ----
 const storeGroup = new THREE.Group(); storeGroup.name = 'storage';
+const byId = {};
 let storeOn = true;
 try { storeOn = localStorage.getItem('store_u') !== '0'; } catch (e) { /* 使えないときは出す */ }
+const tag = (o, id) => { o.traverse((m) => { m.userData.storeId = id; m.userData.noOcc = true; }); return o; };
+
+function buildShelf(u, g, W, D, H) {
+  const sd = u.sd || D, zc = -D / 2 + sd / 2, cur = {};
+  for (const b of u.b) {
+    const [y, f0, f1] = Array.isArray(b) ? b : [b, 0, 1];
+    if (y > 0) { const bw = W * (f1 - f0); const m = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.02, sd), SM.board); m.position.set(-W / 2 + W * f0 + bw / 2, y - 0.01, zc); m.receiveShadow = m.castShadow = true; g.add(m); }
+  }
+  const ys = u.b.map((b) => (Array.isArray(b) ? b[0] : b));
+  for (const [s, label, n, t, w, h, d, col, at] of u.it) {
+    const y = ys[s];
+    if (at != null) cur[s] = -W / 2 + at;
+    let x = cur[s] ?? (-W / 2 + 0.02); const x0 = x;
+    for (let i = 0; i < n; i++) {
+      const m = shape(t, w, h, d, Array.isArray(col) ? col[i % col.length] : col);
+      m.position.x = x + w / 2; m.position.y += y; m.position.z = zc; g.add(m); x += w + 0.015;
+    }
+    cur[s] = x;
+    addLabel(u, g, label, (x0 + x) / 2, y + Math.min(h, 0.4) * 0.55, Math.min(D / 2, zc + d / 2) + 0.04);
+  }
+}
+function addLabel(u, g, text, x, y, z) {
+  const s = labelSprite(text, u.col, 0.07, true); s.position.set(x, y, z); s.visible = false; g.add(s); u.labels.push(s);
+}
+function buildDrawers(u, g, W, D, H) {
+  if (u.carcass) {   // 外箱（上・横・後ろ）
+    const cm = SM[u.carcass], t = 0.012;
+    for (const [w, h, d, x, y, z] of [[W, t, D, 0, H - t / 2, 0], [t, H, D, -W / 2 + t / 2, H / 2, 0], [t, H, D, W / 2 - t / 2, H / 2, 0], [W, H, t, 0, H / 2, -D / 2 + t / 2]]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), cm); m.position.set(x, y, z); g.add(m);
+    }
+  }
+  const dw = W / u.cols; let k = 0;
+  u.drawers = [];
+  u.rows.forEach(([hb, ht], r) => {
+    for (let c = 0; c < u.cols; c++, k++) {
+      const [label, col] = u.dl[k] || ['', 0x999999];
+      const dh = ht - hb, dr = new THREE.Group(); dr.position.set(-W / 2 + dw * (c + 0.5), hb, 0);
+      const fm = u.front === 'case' ? SM.case : u.front === 'chest' ? SM.chest : SM.chest;
+      const front = new THREE.Mesh(new THREE.BoxGeometry(dw - 0.006, dh - 0.006, 0.018), fm);
+      front.position.set(0, dh / 2, D / 2 + 0.009 + (u.fo || 0)); front.castShadow = true; dr.add(front);
+      if (u.front === 'kitchen') front.userData.sync = 'kitchen';
+      const knob = new THREE.Mesh(new THREE.BoxGeometry(Math.min(0.12, dw * 0.3), 0.012, 0.012), SM.knob);
+      knob.position.set(0, dh - 0.035, D / 2 + 0.024 + (u.fo || 0)); dr.add(knob);
+      const td = D - 0.05, tz = D / 2 - td / 2, th = Math.max(0.06, dh * 0.6);
+      const bot = new THREE.Mesh(new THREE.BoxGeometry(dw - 0.03, 0.01, td), SM.tray); bot.position.set(0, 0.015, tz); dr.add(bot);
+      for (const sx of [-1, 1]) { const sdm = new THREE.Mesh(new THREE.BoxGeometry(0.01, th, td), SM.tray); sdm.position.set(sx * (dw / 2 - 0.02), th / 2 + 0.01, tz); dr.add(sdm); }
+      const bk = new THREE.Mesh(new THREE.BoxGeometry(dw - 0.03, th, 0.01), SM.tray); bk.position.set(0, th / 2 + 0.01, tz - td / 2); dr.add(bk);
+      // 中身：同じ色の物を3つ（たたんだ服・食器などのかたまり）
+      const iw = (dw - 0.08) / 3, ih = Math.min(0.12, th * 0.8);
+      for (let i = 0; i < 3; i++) {
+        const cc = new THREE.Color(col).multiplyScalar(0.85 + 0.12 * i).getHex();
+        const m = shape('b', iw - 0.01, ih, td * 0.75, cc); m.position.x = -dw / 2 + 0.04 + iw * (i + 0.5); m.position.y += 0.02; m.position.z = tz + 0.02; dr.add(m);
+      }
+      const s = labelSprite(label, u.col, 0.065, true); s.position.set(0, dh + 0.04, D / 2 + 0.1); s.visible = false; dr.add(s); u.labels.push(s);
+      dr.userData.delay = (r * u.cols + c) * 0.04;
+      g.add(dr); u.drawers.push(dr);
+    }
+  });
+  const md = (u.drawers.length - 1) * 0.04;
+  u.set = ([t]) => { for (const dr of u.drawers) { const k2 = Math.min(1, Math.max(0, (t - dr.userData.delay) / (1 - md))); dr.position.z = k2 * D * 0.62; } };
+}
+function buildBoxes(u, g, W, D, H) {
+  let x = -W / 2 + 0.02; u.lids = [];
+  for (const [label, w, h, d, col, inner] of u.bx) {
+    const bm = mat(col), t = 0.008, bg = new THREE.Group(); bg.position.set(x + w / 2, 0, 0);
+    for (const [bw, bh, bd, px, py, pz] of [[w, t, d, 0, t / 2, 0], [t, h, d, -w / 2 + t / 2, h / 2, 0], [t, h, d, w / 2 - t / 2, h / 2, 0], [w, h, t, 0, h / 2, -d / 2 + t / 2], [w, h, t, 0, h / 2, d / 2 - t / 2]]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), bm); m.position.set(px, py, pz); m.castShadow = m.receiveShadow = true; bg.add(m);
+    }
+    const lid = new THREE.Group(); lid.position.set(0, h, -d / 2);
+    const lm = new THREE.Mesh(new THREE.BoxGeometry(w + 0.01, 0.012, d + 0.01), bm); lm.position.set(0, 0.006, d / 2); lm.castShadow = true; lid.add(lm); bg.add(lid); u.lids.push(lid);
+    let ix = -w / 2 + 0.03;
+    for (const [tt, iw, ih, id, ic] of inner) { const m = shape(tt, iw, Math.min(ih, h - 0.03), id, ic); m.position.x = ix + iw / 2; m.position.y += t; ix += iw + 0.02; bg.add(m); }
+    const s = labelSprite(label, u.col, 0.07, true); s.position.set(0, h + 0.12, d / 2 + 0.05); s.visible = false; bg.add(s); u.labels.push(s);
+    g.add(bg); x += w + 0.05;
+  }
+  u.set = ([t]) => { for (const l of u.lids) l.rotation.x = -1.9 * t; };
+}
+function buildShed(u, g, W, D, H) {
+  const t = 0.03;
+  for (const [w, h, d, x, y, z, m] of [[W, t, D, 0, t / 2, 0, SM.shedIn], [t, H, D, -W / 2 + t / 2, H / 2, 0, SM.shed], [t, H, D, W / 2 - t / 2, H / 2, 0, SM.shed], [W, H, t, 0, H / 2, -D / 2 + t / 2, SM.shed],
+    [W + 0.08, 0.04, D + 0.1, 0, H + 0.02, -0.02, SM.shed], [W, 0.08, 0.04, 0, H - 0.04, D / 2 - 0.02, SM.shed], [W, 0.05, 0.05, 0, 0.025, D / 2 - 0.02, SM.shed]]) {
+    const mm = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); mm.position.set(x, y, z); mm.castShadow = mm.receiveShadow = true; g.add(mm);
+  }
+  // 中の背板（暗め）
+  const bk = new THREE.Mesh(new THREE.BoxGeometry(W - 0.06, H - 0.1, 0.005), SM.shedIn); bk.position.set(0, H / 2, -D / 2 + t + 0.003); g.add(bk);
+  buildShelf(u, g, W - 0.06, D - 0.08, H);
+  // 引き戸 2枚（A＝左・奥のレール、B＝右・手前のレール）
+  const dw = W / 2 + 0.02, dh = H - 0.12;
+  const mk = (z) => { const d = new THREE.Group(); const p = new THREE.Mesh(new THREE.BoxGeometry(dw, dh, 0.02), SM.shedDoor); p.position.y = 0.05 + dh / 2; p.castShadow = true; d.add(p);
+    for (let k = 1; k < 4; k++) { const r = new THREE.Mesh(new THREE.BoxGeometry(dw - 0.04, 0.012, 0.006), SM.shed); r.position.set(0, 0.05 + dh * k / 4, 0.012); d.add(r); }
+    const h = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.14, 0.015), SM.knob); h.position.set(0, 0.85, 0.018); d.add(h); h.name = 'handle'; d.position.z = z; g.add(d); return d; };
+  const A = mk(D / 2 + 0.012), B = mk(D / 2 + 0.036);
+  A.children.find((o) => o.name === 'handle').position.x = dw / 2 - 0.06; B.children.find((o) => o.name === 'handle').position.x = -dw / 2 + 0.06;
+  const ax = -W / 2 + dw / 2, bx = W / 2 - dw / 2, run = W - dw;
+  u.set = ([a, b]) => { A.position.x = ax + run * a; B.position.x = bx - run * b; };
+  u.n = 2;
+}
+function buildItem(u, g, W, D, H) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), new THREE.MeshBasicMaterial({ color: u.col, transparent: true, opacity: 0.28, depthWrite: false }));
+  m.position.y = H / 2; m.userData.noAO = true; g.add(m);
+  m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: u.col })));
+}
+// 開き戸：leaf＝ここで作る（材料は家のモデルの同じ名前の物に合わせる）
+function buildLeaf(u, FL1) {
+  const d = u.door, L = (d.y1 - d.y0) / 100, H = d.h1 - d.h0;
+  const pv = new THREE.Group(); pv.position.set(PX(d.x + 2), FL1 + LV[u.lv] + d.h0, PZ(d.y1));
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.035, H, L), SM.chest); leaf.position.set(0, H / 2, -L / 2); leaf.castShadow = true; leaf.userData.sync = d.sync; pv.add(leaf);
+  const kb = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.02, 0.12), SM.knob); kb.position.set(0.03, 1.0 - d.h0, -L + 0.08); pv.add(kb);
+  storeGroup.add(tag(pv, u.id)); u.pivot = pv;
+}
 export function addStorage(furn, FL1) {
-  for (const [lv, x0, y0, x1, y1, h0, h1, col, text] of STORE) {
-    const base = FL1 + LV[lv];
-    const m = new THREE.Mesh(new THREE.BoxGeometry((x1 - x0) / 100, h1 - h0, (y1 - y0) / 100),
-      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.28, depthWrite: false }));
-    m.position.set(PX((x0 + x1) / 2), base + (h0 + h1) / 2, PZ((y0 + y1) / 2)); m.userData.noOcc = true;
-    const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: col }));
-    m.add(e);
-    const s = labelSprite(text, col); s.position.set(PX((x0 + x1) / 2), base + h1 + 0.1, PZ((y0 + y1) / 2));
-    storeGroup.add(m, s);
+  for (const u of UNITS) {
+    byId[u.id] = u; u.labels = []; u.cur = [0, 0]; u.tgt = [0, 0]; u.n = 1;
+    const [x0, y0, x1, y1] = u.r, [h0, h1] = u.h, ns = u.f === 'N' || u.f === 'S';
+    const W = (ns ? x1 - x0 : y1 - y0) / 100, D = (ns ? y1 - y0 : x1 - x0) / 100, H = h1 - h0;
+    const g = new THREE.Group(); g.position.set(PX((x0 + x1) / 2), FL1 + LV[u.lv] + h0, PZ((y0 + y1) / 2)); g.rotation.y = ROT[u.f];
+    if (u.kind === 'shelf') buildShelf(u, g, W, D, H);
+    else if (u.kind === 'drawers') buildDrawers(u, g, W, D, H);
+    else if (u.kind === 'boxes') buildBoxes(u, g, W, D, H);
+    else if (u.kind === 'shed') buildShed(u, g, W, D, H);
+    else buildItem(u, g, W, D, H);
+    if (u.door && u.door.type === 'leaf') buildLeaf(u, FL1);
+    // 名前の札（いつも出す）
+    if (!u.nolabel) { const s = labelSprite(u.name + (u.kind === 'item' ? '' : '　▶タップ'), u.col, 0.08); s.position.set(0, H + 0.1, 0); g.add(s); }
+    storeGroup.add(tag(g, u.id)); u.group = g;
   }
   storeGroup.visible = storeOn; furn.add(storeGroup);
+}
+
+// ---- 家のモデル側の物とつなぐ（モデルを読み直したときにも）：収納(1)の扉を回せるようにし、材料の見た目を合わせる ----
+function hookModel() {
+  const d = window._dbg; if (!d) return;
+  const byMat = {};
+  d.rig.traverse((o) => { if (o.isMesh && o.material && o.material.name && !o.userData.storeId && !byMat[o.material.name]) byMat[o.material.name] = o.material; });
+  // 収納(1)：家のモデルの扉（washdoor）と取っ手（washknob）を、蝶番（北の端・和室側の面）を軸に回す
+  const u = byId.store1;
+  if (u) {
+    let door = null, knob = null;
+    d.rig.traverse((o) => { if (o.isMesh && !o.userData.hooked) { const n = o.material && o.material.name; if (n === 'washdoor') door = o; if (n === 'washknob') knob = o; } });
+    if (door && door.parent) {
+      const bb = new THREE.Box3().setFromObject(door), par = door.parent;
+      const pv = new THREE.Group(); par.add(pv); par.updateMatrixWorld(true);
+      pv.position.copy(par.worldToLocal(new THREE.Vector3(bb.max.x, bb.min.y, bb.max.z)));
+      pv.updateMatrixWorld(true); pv.attach(door); if (knob) pv.attach(knob);
+      for (const o of [door, knob]) if (o) { o.userData.hooked = true; o.userData.storeId = 'store1'; }
+      door.userData.sync = 'tread'; u.pivot = pv; applyUnit(u);
+    }
+  }
+  // 見た目を合わせる（扉＝建具の色、カップボードの引き出し＝キッチンの扉の色、収納(1)の扉＝和室の扉の色）
+  const all = [d.rig];
+  for (const root of all) root.traverse((o) => { if (o.isMesh && o.userData.sync && byMat[o.userData.sync] && o.material !== byMat[o.userData.sync]) o.material = byMat[o.userData.sync]; });
+}
+setInterval(hookModel, 1500);
+
+// ---- 開け閉め（なめらかに動かす）----
+function applyUnit(u) {
+  if (u.set) u.set(u.cur);
+  if (u.pivot) u.pivot.rotation.y = -1.75 * u.cur[0];   // 開き戸：手前（東）へ約100°
+  const open = u.tgt.some((v) => v > 0);
+  for (const s of u.labels) s.visible = open;
+}
+let anim = false, lastT = 0;
+function tick(now) {
+  let more = false;
+  const step = Math.min(0.25, Math.max(0.01, ((now || performance.now()) - (lastT || now || 0)) / 1000 * 1.8)); lastT = now || performance.now();   // 約0.6秒で開く（コマ落ちしても時間で進める）
+  for (const u of UNITS) {
+    for (let i = 0; i < 2; i++) {
+      const dv = u.tgt[i] - u.cur[i];
+      if (Math.abs(dv) > 0.002) { u.cur[i] += Math.sign(dv) * Math.min(Math.abs(dv), step); more = true; } else u.cur[i] = u.tgt[i];
+    }
+    applyUnit(u);
+  }
+  const d = window._dbg; d && d.ext && d.ext.invalidate && d.ext.invalidate();
+  if (more) requestAnimationFrame(tick); else anim = false;
+}
+function setTarget(u, tg) { u.tgt = tg; for (const s of u.labels) s.visible = tg.some((v) => v > 0); if (!anim) { anim = true; lastT = performance.now(); requestAnimationFrame(tick); } }
+const isOpen = (u) => u.tgt.some((v) => v > 0);
+
+// ---- 中身の一覧（下に出る板）----
+const pop = document.createElement('div');
+pop.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:51;background:rgba(28,30,33,.94);color:#fff;border-radius:14px;padding:12px 14px 10px;width:min(520px,92vw);max-height:50vh;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,.4);display:none;font-size:15px;line-height:1.5';
+document.body.append(pop);
+function closePop() { pop.style.display = 'none'; }
+function contentsOf(u) {
+  if (u.it) return u.it.map((x) => [x[1], Array.isArray(x[7]) ? x[7][0] : x[7]]);
+  if (u.dl) return u.dl;
+  if (u.bx) return u.bx.map((x) => [x[0], x[4]]);
+  return [[u.name, u.col]];
+}
+function showPop(u) {
+  pop.innerHTML = '';
+  const h = document.createElement('div'); h.style.cssText = 'font-weight:700;margin-bottom:6px;display:flex;justify-content:space-between;gap:12px;align-items:center';
+  h.textContent = u.name;
+  const x = document.createElement('button'); x.textContent = '×'; x.style.cssText = 'background:none;border:0;color:#fff;font-size:22px;padding:0 4px'; x.onclick = closePop; h.append(x); pop.append(h);
+  const seen = new Set(), ul = document.createElement('div');
+  for (const [label, col] of contentsOf(u)) {
+    if (seen.has(label)) continue; seen.add(label);
+    const r = document.createElement('div'); r.innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;vertical-align:-1px;background:${hexs(col)}"></span>`;
+    r.append(label); ul.append(r);
+  }
+  pop.append(ul);
+  if (u.note) { const n = document.createElement('div'); n.textContent = u.note; n.style.cssText = 'font-size:13px;color:#bbb;margin-top:6px'; pop.append(n); }
+  const row = document.createElement('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px';
+  const btn = (label, on, f) => { const b = document.createElement('button'); b.textContent = label; b.style.cssText = `padding:8px 12px;border-radius:10px;border:1px solid ${on ? '#e8792f' : '#555'};background:${on ? '#3a2a1f' : '#2c2f33'};color:${on ? '#ffb27a' : '#fff'};font-size:15px`; b.onclick = f; row.append(b); };
+  if (u.kind === 'shed') {
+    btn('左の戸を開ける', u.tgt[0] > 0, () => { setTarget(u, [1, 0]); showPop(u); });
+    btn('右の戸を開ける', u.tgt[1] > 0, () => { setTarget(u, [0, 1]); showPop(u); });
+    btn('閉める', !isOpen(u), () => { setTarget(u, [0, 0]); showPop(u); });
+  } else if (u.kind !== 'item') {
+    const moving = u.set || u.pivot;
+    btn(moving ? (isOpen(u) ? '閉める' : '開ける') : (isOpen(u) ? '名札を消す' : '名札を出す'), false, () => { setTarget(u, isOpen(u) ? [0, 0] : [1, 0]); showPop(u); });
+  }
+  if (row.childElementCount) pop.append(row);
+  pop.style.display = 'block';
+}
+// タップされたとき（design_u.js から呼ぶ）：閉まっていれば開けて一覧を出す。開いていれば閉める
+function tap(id) {
+  const u = byId[id]; if (!u) return;
+  if (u.kind === 'item') { showPop(u); return; }
+  if (u.kind === 'shed') { const nx = u.tgt[0] > 0 ? [0, 1] : u.tgt[1] > 0 ? [0, 0] : [1, 0]; setTarget(u, nx); }   // 左 → 右 → 閉める
+  else setTarget(u, isOpen(u) ? [0, 0] : [1, 0]);
+  if (isOpen(u) || u.kind === 'shed') showPop(u); else closePop();
+}
+function setAll(on) {
+  for (const u of UNITS) if (u.kind !== 'item') setTarget(u, on ? [1, 0] : [0, 0]);
+  document.querySelectorAll('.storeallbtn').forEach((b) => { b.textContent = on ? '収納をぜんぶ閉める' : '収納をぜんぶ開ける'; b.classList.toggle('on', on); });
+  closePop();
 }
 function setStore(on) {
   storeOn = on; storeGroup.visible = on;
@@ -395,8 +711,10 @@ function setStore(on) {
   const d = window._dbg; d && d.ext && d.ext.invalidate && d.ext.invalidate();
 }
 {
+  let allOn = false;
   const mk = () => { const b = document.createElement('button'); b.className = 'storebtn'; b.onclick = () => setStore(!storeOn); return b; };
-  document.querySelectorAll('.tvonbtn').forEach((b) => b.after(mk()));
+  const mkAll = () => { const b = document.createElement('button'); b.className = 'storeallbtn'; b.textContent = '収納をぜんぶ開ける'; b.onclick = () => { allOn = !allOn; setAll(allOn); }; return b; };
+  document.querySelectorAll('.tvonbtn').forEach((b) => b.after(mk(), mkAll()));
   setStore(storeOn);
 }
-window._store = { setStore, STORE };
+window._store = { setStore, setAll, tap, closePop, UNITS, byId };

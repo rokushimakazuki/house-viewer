@@ -590,6 +590,8 @@ function pick(cx, cy) {
   d.camera.updateMatrixWorld(); ray.setFromCamera(ndc, d.camera); ray.firstHitOnly = false;
   const hits = ray.intersectObject(d.rig, true);
   for (const h of hits) {
+    // 収納（棚・引き出し・扉・名札）：タップで開け閉め（furn_u.js）
+    if ((h.object.isMesh || h.object.isSprite) && h.object.userData.storeId && visibleChain(h.object)) return { store: h.object.userData.storeId };
     if (!h.object.isMesh || !visibleChain(h.object)) continue;
     let n = h.object.material && h.object.material.name;
     if (n === 'glass') continue;   // ガラスの向こうを見る
@@ -610,6 +612,9 @@ function pick(cx, cy) {
       touches = Math.max(0, touches - 1);
       if (!t0 || e.type !== 'pointerup' || performance.now() - t0.t > 400) { t0 = null; return; }
       const hit = pick(e.clientX, e.clientY); t0 = null;
+      const st = window._store;
+      if (hit && hit.store) { closePop(); st && st.tap(hit.store); return; }
+      st && st.closePop();
       if (hit) openPop(hit.n, hit.pk, hit.rk); else closePop();
     };
     c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
