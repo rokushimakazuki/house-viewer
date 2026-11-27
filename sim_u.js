@@ -248,6 +248,7 @@ const css = `
 #simbox .sub{color:#b8bcc0;font-size:12px}
 #simbox table{border-collapse:collapse;width:100%;font-size:12.5px}#simbox td,#simbox th{border-bottom:1px solid #444;padding:3px 4px;text-align:left}
 #simbox input[type=range]{width:100%}
+#simbox select{max-width:100%}
 #simind{position:fixed;left:0;top:0;width:100%;height:100%;z-index:55;pointer-events:none;display:none}
 #simind .ind{position:absolute;left:0;top:0;pointer-events:auto;cursor:pointer;touch-action:manipulation;display:flex;align-items:center;gap:4px;white-space:nowrap;background:rgba(255,255,255,.9);color:#222;border-radius:10px;padding:2px 8px 2px 3px;font:600 12px/1.35 "Hiragino Sans","Yu Gothic",sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.35);border-left:5px solid}
 #simind .ind .tg{font-weight:400;color:#555;font-size:11px}
@@ -324,7 +325,7 @@ function inval() { const d = state.d; d.ext && d.ext.invalidate && d.ext.invalid
 function load(sc) {
   state.sc = sc; const S = SCEN[sc]; state.P = plan(sc); state.res = analyze(sc, state.P); state.t = tmin(S.t0);
   // 歩いた道（人ごとの色の線）
-  const tr = state.trails; while (tr.children.length) tr.remove(tr.children[0]);
+  const tr = state.trails; while (tr.children.length) { const o = tr.children[0]; tr.remove(o); o.geometry.dispose(); o.material.dispose(); }
   for (const p of PEOPLE) {
     if (p.baby) continue;
     const pts = [];
@@ -337,7 +338,7 @@ function load(sc) {
   let h = '<table><tr><th>人</th><th>歩いた距離</th><th>階段（上り／下り）</th></tr>';
   for (const p of PEOPLE) { const x = r.per[p.id]; h += `<tr><td><span style="color:#${p.col.toString(16).padStart(6, '0')}">●</span> ${p.name}</td><td>${x.carried && p.baby ? '（抱っこ）' : '約 ' + Math.round(x.m) + ' m'}</td><td>${x.up}回／${x.dn}回</td></tr>`; }
   h += '</table><div style="margin-top:6px"><b>同じ時間に同じ狭い場所にいる所</b>（いっしょに動く組は除く）</div>';
-  h += r.clash.length ? '<ul style="margin:4px 0;padding-left:18px">' + r.clash.map((c) => `<li>${fmt(c.t0)}〜${fmt(c.t1 + 1 / 6)}　${c.where}：${c.who.join('と')}</li>`).join('') + '</ul>' : '<div class="sub">なし</div>';
+  h += r.clash.length ? '<ul style="margin:4px 0;padding-left:18px">' + r.clash.map((c) => `<li data-t0="${c.t0}" data-t1="${c.t1}">${fmt(c.t0)}〜${fmt(c.t1 + 1 / 6)}　${c.where}：${c.who.join('と')}</li>`).join('') + '</ul>' : '<div class="sub">なし</div>';
   state.box.querySelector('#simresb').innerHTML = h;
   state.box.querySelector('#simguess').innerHTML = '【推測】で入れた所：' + S.guess.join('／') + '。直したい所は教えてください。';
   darkStudy();
@@ -352,6 +353,8 @@ function loadScene(id) {
   if (x.who) state.sel = x.who;
   const lk = state.box.querySelector('#simlook'); lk.style.display = x.look ? '' : 'none'; lk.textContent = x.look ? '見るポイント：' + x.look : '';
   state.box.querySelector('#simsc').value = x.id; state.eyeInit = false;
+  // 結果の「混み合い」のうち、このシーンの時間に入るものに印をつける
+  for (const li of state.box.querySelectorAll('#simresb li[data-t0]')) { const on = !!state.rng && +li.dataset.t1 >= state.rng[0] && +li.dataset.t0 <= state.rng[1]; li.style.fontWeight = on ? '700' : ''; li.style.color = on ? '#ffb27a' : ''; }
   update(); applyView(true);
 }
 function update() {
@@ -372,7 +375,7 @@ function update() {
     if (q.lying && !p.baby) { f.position.y += 0.15; f.rotation.y = Math.PI; if (q.seg.node === 'bed1') f.position.z += p.id === 'k1' ? -0.22 : 0.22; }   // 息子と娘は同じベッドに並んで寝る   // 寝ている人は頭が東（まくらの側）
     const act = q.seg.act, top = !isIn(), nm = p.name.replace(/（.*/, '') + (p.id === 'mama' && babyHeld ? '・赤ちゃん' : ''), txt = top ? nm : nm + '：' + act;
     if (state.labels[p.id] !== txt) {
-      if (f.userData.lab) f.remove(f.userData.lab);
+      if (f.userData.lab) { const o = f.userData.lab; f.remove(o); o.material.map.dispose(); o.material.dispose(); }   // 古い名札の絵は捨てる（中から見ると文字がよく変わるので、残すと重くなる）
       const L = label(txt, p.col); f.add(L); f.userData.lab = L; state.labels[p.id] = txt;
     }
     if (f.userData.lab) f.userData.lab.visible = !q.carried;   // 全員に名札（抱っこ中の赤ちゃんは母の名札にまとめる）
@@ -411,12 +414,12 @@ function eyeCam() {
     if (dir.lengthSq() > 1e-6) { dir.transformDirection(d.furn.matrixWorld); dir.y = 0; tgtYaw = d.heading(dir.normalize()); }
     const dh = nx.h - q.h; if (Math.abs(dh) > 0.01) tgtPitch = dh > 0 ? 0.05 : -0.35;   // 階段：上りは前、下りは足元
   }
-  const ins = d.inside, k = state.eyeInit ? 0.12 : 1;
+  const ins = d.inside, k = state.eyeInit && state.play ? 0.12 : 1;   // 再生中は少しずつ向く。止めてつまみを動かしたときはすぐ向く
   if (tgtYaw !== null) { let a = tgtYaw - ins.yaw; a = Math.atan2(Math.sin(a), Math.cos(a)); ins.yaw += a * k; }
   if (q.walking || q.lying || !state.eyeInit) ins.pitch += (tgtPitch - ins.pitch) * k;
   state.eyeInit = true;
   const vp = document.getElementById('vpname'), txt = p.name.replace(/（.*/, '') + 'の目線（目の高さ 約' + Math.round((q.lying || q.carried ? up : EYE[id] || p.h * 0.92) * 100) + 'cm）' + (q.walking ? '・歩いている間は実際の速さ' : '');
-  if (vp && vp.textContent !== txt) vp.textContent = txt;
+  if (vp && vp.textContent !== txt) { vp.textContent = txt; state.eyeVp = true; }
 }
 // 見る方向：上から見るときは、その階の天井より上を切って見せる
 let lastFloor = null;
@@ -425,9 +428,16 @@ function applyView(force) {
   const q = posAt(state.P, state.sel, state.t), floor = view === '1' ? 1 : view === '2' ? 2 : (q.h > 1.6 ? 2 : 1);
   if (view === 'eye') {
     d.renderer.clippingPlanes = [];
-    if (force) { if (!d.inside.on) d.enterInside(); lastFloor = null; const bar = document.getElementById('bar'), bm = document.getElementById('barmin'); if (bar && bm && !bar.classList.contains('min')) bm.click(); }   // 動画のように見られるよう、下の操作はたたむ
+    if (force) {
+      if (!d.inside.on) d.enterInside(); lastFloor = null;
+      // 動画のように見られるよう、下の操作と左上の板はたたむ（目線をやめたら元に戻す）
+      const bar = document.getElementById('bar'), bm = document.getElementById('barmin');
+      if (bar && bm && !bar.classList.contains('min')) { bm.click(); state.eyeBar = true; }
+      if (!state.box.classList.contains('min')) { fold(true); state.eyeFold = true; }
+    }
     return;
   }
+  eyeOff();
   if (view === 'in') {
     d.renderer.clippingPlanes = [];
     if (force) { if (!d.inside.on) d.enterInside(); lastFloor = null; const w = state.figs[state.sel].getWorldPosition(new THREE.Vector3()); d.camera.position.set(w.x - 1.0, w.y + 1.55, w.z + 1.0); d.inside.yaw = d.heading(new THREE.Vector3(1, 0, -1)); d.inside.pitch = -0.3; }
@@ -450,6 +460,13 @@ function applyView(force) {
 // ---- 日差しと暗さ ----
 // 暮らしの動きの時刻に合わせて、太陽の位置（季節はこの板か、日差しの板で選んだもの）を動かす。
 // 太陽が地平線より下（日の出前・日没後）は「夜にする（照明をつける）」と同じ状態にする。閉じたら元の時刻・夜の設定に戻す
+// 目線で歩くのをやめたとき：自動でたたんだ板を戻し、上の見出しを元の立ち位置の名前に戻す
+function eyeOff() {
+  const d = state.d;
+  if (state.eyeBar) { state.eyeBar = false; const bar = document.getElementById('bar'), bm = document.getElementById('barmin'); if (bar && bm && bar.classList.contains('min')) bm.click(); }
+  if (state.eyeFold) { state.eyeFold = false; fold(false); }
+  if (state.eyeVp) { state.eyeVp = false; if (d.inside.on && d.goVP) { const p = d.camera.position.clone(), y = d.inside.yaw, pi = d.inside.pitch; d.goVP(d.inside.vp); d.camera.position.copy(p); d.inside.yaw = y; d.inside.pitch = pi; } }
+}
 function sunSync(force) {
   const d = state.d; if (!state.sunOn || !d.sunState || !d.setHour || !d.ext) return;
   const el = state.box.querySelector('#simsun'), ssn = state.box.querySelector('#simssn');
@@ -638,7 +655,7 @@ function loop() {
   let spd = +state.box.querySelector('#simspd').value;   // 1秒で何分進めるか（60倍＝1秒で1分）
   if (state.view === 'eye' && posAt(state.P, state.sel, state.t).walking) spd = 1;   // 目線で歩くときは、歩いている間だけ実際の速さ
   state.t += dt * spd / 60; const end = rng()[1];
-  if (state.t >= end) { state.t = end; state.play = false; setPlayBtn(); setTimeout(() => sunSync(true), 0); if (!state.box.classList.contains('min')) state.box.querySelector('#simres').open = true; }
+  if (state.t >= end) { state.t = end; state.play = false; setPlayBtn(); setTimeout(() => sunSync(true), 0); if (!state.rng && !state.box.classList.contains('min')) state.box.querySelector('#simres').open = true; }   // 通しで見終わったときだけ結果を開く
   update();
   requestAnimationFrame(loop);
 }
@@ -651,6 +668,8 @@ function open() {
   if (!state.indRun) { state.indRun = true; requestAnimationFrame(indLoop); }
 }
 function close() {
+  if (state.view === 'eye') { state.view = 'auto'; for (const b of state.box.querySelectorAll('[data-view]')) b.classList.toggle('on', b.dataset.view === 'auto'); }
+  eyeOff();
   const ui = document.getElementById('ui'); if (ui && !state.d.inside.on) ui.style.display = state.uiDisp || '';
   state.play = false; sunRestore(); state.box.style.display = 'none'; state.root.visible = false; state.ind.style.display = 'none'; state.d.renderer.clippingPlanes = []; lastFloor = null; state.d.applySun && state.d.applySun(); inval();   // 日の当たる床の面積は閉じてから計算し直す
 }
