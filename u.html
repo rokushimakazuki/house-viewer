@@ -850,7 +850,7 @@ async function updateSee() {
 function label() {
   const dh = camera.position.y - eyeY();   // 2本指で上下に動かした分
   const hs = Math.abs(dh) < 0.05 ? (seated() ? '座った目線' : '立った目線') : '目の高さ 床から' + (camera.position.y - vpFloor(VPS[inside.vp])).toFixed(1) + 'm';
-  $('#vpname').textContent = VPS[inside.vp].name + '・' + hs + '・11/20 プラン・リビング窓' + (state.h / 10).toFixed(1) + 'm';
+  $('#vpname').textContent = VPS[inside.vp].name + '・' + hs + '・11/27 プラン・リビング窓' + (state.h / 10).toFixed(1) + 'm';
 }
 // 比較画像の立ち位置
 const SHEET_VPS = ['sofa', 'dining', 'garden', 'nbr_g', 'nbr_2f', 'road_w'];
@@ -959,6 +959,11 @@ const pmid = () => { const [a, b] = [...ptrs.values()]; return { x: (a.x + b.x) 
 const two = () => ({ d: pdist(), ...pmid() });
 // 上下・左右に動く（2本指でなぞる）。高さは地面の少し下から屋根の上まで
 function rise(dy) { camera.position.y = THREE.MathUtils.clamp(camera.position.y + dy, -0.5, 9); label(); }
+function fly(dist) {   // 見ている方向（上下も含む）へ進む
+  const f = new THREE.Vector3(); camera.getWorldDirection(f);
+  camera.position.addScaledVector(f, dist);
+  camera.position.y = THREE.MathUtils.clamp(camera.position.y, -0.5, 9); label();
+}
 function strafe(dx) {
   const f = new THREE.Vector3(); camera.getWorldDirection(f); f.y = 0;
   if (f.lengthSq() < 1e-6) return; f.normalize();
@@ -972,10 +977,9 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 renderer.domElement.addEventListener('pointermove', (e) => {
   if (!inside.on) return;
   if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (ptrs.size >= 2 && pinch != null) {   // 2本指：広げる＝進む、そろえて上下＝上がる・下がる、左右＝横に動く
+  if (ptrs.size >= 2 && pinch != null) {   // 2本指でなぞる：上へ＝見ている方向へ進む（上を見ていれば上がる）、下へ＝下がる、左右＝横に動く（11/27）
     const t = two();
-    walk((t.d - pinch.d) * 0.012);   // 100px 広げると約1.2m 進む
-    rise(-(t.y - pinch.y) * 0.01);   // 指を100px 上へ＝1m 上がる
+    fly(-(t.y - pinch.y) * 0.012);   // 指を100px 上へ＝約1.2m 進む
     strafe(-(t.x - pinch.x) * 0.01); // 指を右へ＝左へずれる（景色をつかんで動かす向き）
     pinch = t; return;
   }
@@ -991,7 +995,7 @@ const endDrag = (e) => {
 };
 renderer.domElement.addEventListener('pointerup', endDrag);
 renderer.domElement.addEventListener('pointercancel', endDrag);
-renderer.domElement.addEventListener('wheel', (e) => { if (inside.on) { e.preventDefault(); if (e.shiftKey) rise(-Math.sign(e.deltaY || e.deltaX) * 0.2); else walk(-Math.sign(e.deltaY) * 0.3); } }, { passive: false });   // Shift＋ホイール＝上下
+renderer.domElement.addEventListener('wheel', (e) => { if (inside.on) { e.preventDefault(); if (e.shiftKey) rise(-Math.sign(e.deltaY || e.deltaX) * 0.2); else fly(-Math.sign(e.deltaY) * 0.3); } }, { passive: false });   // Shift＋ホイール＝上下
 
 // ▲▼ 押している間だけ進む／下がる
 for (const [id, dir] of [['#fw', 1], ['#bw', -1]]) {

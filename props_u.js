@@ -15,6 +15,7 @@ const PL = (c) => pm(c, 0.45);              // プラスチック
 const FA = (c) => pm(c, 0.95);              // 布
 const ME = (c = 0xb8bcc0) => pm(c, 0.35, 0.8);   // 金属
 const RU = (c = 0x1d1d1e) => pm(c, 0.85);   // ゴム・黒い樹脂
+const MIR = new THREE.MeshStandardMaterial({ color: 0xbcc9d1, roughness: 0.12, metalness: 0.3, envMapIntensity: 0.35 });   // 鏡（空が映り込まないように控えめ）
 const shade = (c, k) => new THREE.Color(c).multiplyScalar(k).getHex();
 let seed = 1;
 const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
@@ -505,16 +506,42 @@ const MODELS = {
     rb(g, W * 0.7, 0.04, 0.12, pm(0xe6e6e4, 0.3), 0, 0.6, -D / 2 + 0.11, 0.015);
   },
   // 木のカウンターの洗面（ツアー 11/27）：下はあいていて、上に白いボウル・壁から出る水栓・鏡
-  basin2(g, W, D, H) {
-    const wd = pm(0xc9a77c, 0.5), wh = pm(0xf8f8f6, 0.15), hh = 0.8;
+  basin2(g, W, D, H, o = {}) {
+    const wd = pm(0xc9a77c, 0.5), wh = pm(0xf8f8f6, 0.15), hh = o.small ? 0.75 : 0.8;
     rb(g, W, 0.04, D, wd, 0, hh - 0.04, 0, 0.006);
     for (const s of [-1, 1]) rb(g, 0.03, 0.03, D - 0.08, ME(0x9a9ea2), s * (W / 2 - 0.12), hh - 0.07, -0.02, 0.006);
     rb(g, 0.42, 0.13, 0.34, wh, 0, hh, 0.03, 0.05);
     sp(g, 0.18, 0.01, 0.14, pm(0xdfe5e8, 0.12), 0, hh + 0.13, 0.03, 20);
     tb(g, [0, hh + 0.3, -D / 2], [0, hh + 0.3, -D / 2 + 0.16], 0.012, ME());
     rb(g, 0.06, 0.06, 0.03, ME(), 0, hh + 0.27, -D / 2 + 0.015, 0.01);
-    rb(g, Math.min(W, 0.75), 0.75, 0.02, pm(0xd5dde2, 0.05, 0.9), 0, hh + 0.42, -D / 2 + 0.01, 0.01);
-    rb(g, 0.36, 0.26, 0.28, pm(0xd8c8a8, 1), -W / 2 + 0.25, 0, 0, 0.02);   // 下にかご
+    const mw = Math.min(W - 0.1, 1.4);   // 鏡（黒い細い枠つき）
+    rb(g, mw + 0.03, 0.78, 0.012, pm(0x2a2b2d, 0.4, 0.5), 0, hh + 0.405, -D / 2 + 0.006, 0.004);
+    rb(g, mw, 0.75, 0.012, MIR, 0, hh + 0.42, -D / 2 + 0.014, 0.004);
+    if (!o.small) for (let k = 0; k < Math.floor(W / 0.5); k++) rb(g, 0.36, 0.26, 0.28, pm(0xd8c8a8, 1), -W / 2 + 0.25 + k * 0.45, 0, 0, 0.02);   // 下にかご
+  },
+  // ハンガーパイプと掛けた服（パイプは x の向き。服は z の向きに広がる）。o.n＝着数、o.max＝いちばん長い服、o.pole＝パイプも作る
+  closet(g, W, D, H, o = {}) {
+    const top = 1.7, n = o.n || 24, mx = o.max || 1.0;
+    if (o.pole) { tb(g, [-W / 2, top, 0], [W / 2, top, 0], 0.016, ME()); for (const s of [-1, 1]) rb(g, 0.02, 0.08, 0.06, ME(), s * (W / 2 - 0.01), top - 0.04, 0, 0.005); }
+    const COL = [0x23304a, 0xf2f0ea, 0x8a8f94, 0xc9b79c, 0x1e1e20, 0x5f6b4a, 0x9cb8cf, 0x7a3b3b, 0xe6dcc8, 0x3d4f66, 0xb5a7c4, 0x4a3a2e];
+    const hang = pm(0x7a5a3a, 0.6), step = (W - 0.06) / n;
+    for (let i = 0; i < n; i++) {
+      const x = -W / 2 + 0.03 + step * (i + 0.5), c = COL[Math.floor(rnd() * COL.length)], r = rnd();
+      const t = r < 0.45 ? 'shirt' : r < 0.65 ? 'jacket' : r < 0.8 ? 'pants' : mx > 1 ? (r < 0.9 ? 'coat' : 'dress') : 'shirt';
+      const len = { shirt: 0.68, jacket: 0.75, pants: 0.55, coat: Math.min(mx, 1.05), dress: Math.min(mx, 1.1) }[t] * (0.92 + 0.16 * rnd());
+      const w = t === 'pants' ? 0.34 : 0.44, th = t === 'coat' || t === 'jacket' ? 0.06 : 0.035, m = FA(c), y0 = top - 0.06;
+      arc(g, 0.022, 0.003, Math.PI * 1.2, ME(0x9a9ea2), x, top + 0.003, 0).rotation.y = Math.PI / 2;   // フック
+      tb(g, [x, y0, -w / 2 + 0.02], [x, y0 + 0.04, 0], 0.006, hang); tb(g, [x, y0 + 0.04, 0], [x, y0, w / 2 - 0.02], 0.006, hang);   // ハンガーの肩
+      if (t === 'pants') {   // ハンガーのバーに二つ折り
+        rb(g, 0.05, len, w, m, x, y0 - len, 0, 0.015);
+      } else if (t === 'dress') {   // すそが広がる
+        const dg = add(g, new THREE.CylinderGeometry(0.17, 0.27, len, 16), m, x, y0 - len / 2, 0); dg.scale.x = 0.22;
+      } else {
+        rb(g, th, len, w * 0.92, m, x, y0 - len, 0, 0.018);   // 身ごろ
+        for (const s of [-1, 1]) { const sl = rb(g, th * 0.8, len * 0.62, 0.1, m, x, y0 - len * 0.62 - 0.03, s * (w / 2 - 0.03), 0.02); sl.rotation.x = s * 0.06; }   // そで
+        if (t !== 'shirt') rb(g, th + 0.01, 0.06, 0.16, FA(shade(c, 0.8)), x, y0 - 0.06, 0, 0.012);   // えり
+      }
+    }
   },
   // スロップシンク（深い流し・壁が -z）
   slop(g, W, D, H) {
@@ -525,16 +552,17 @@ const MODELS = {
     tb(g, [0, 0.9, -D / 2 + 0.05], [0, 1.2, -D / 2 + 0.05], 0.012, ME()); tb(g, [0, 1.2, -D / 2 + 0.05], [0, 1.15, -D / 2 + 0.2], 0.012, ME());
   },
   // 浴室の洗い場：壁の水栓・スライドバーのシャワー・鏡・カウンター（壁が -z）
-  shower(g, W, D, H) {
+  shower(g, W, D, H, o = {}) {
     const ch = ME(0xc8ccd0);
+    rb(g, W, 0.008, D, pm(0xb9bcbf, 0.7), 0, 0, 0, 0.002);   // 洗い場の床（グレー）
+    const f = new THREE.Group(); f.position.x = o.ox || 0; g.add(f); g = f;   // 水栓・鏡などは入口をよけて横へずらす
     rb(g, 0.3, 0.07, 0.08, ch, 0, 0.75, -D / 2 + 0.04, 0.02);
     tb(g, [0.05, 0.75, -D / 2 + 0.08], [0.05, 0.72, -D / 2 + 0.16], 0.01, ch);
     tb(g, [0.22, 0.95, -D / 2 + 0.03], [0.22, 1.85, -D / 2 + 0.03], 0.012, ch);
     rb(g, 0.04, 0.04, 0.05, ch, 0.22, 1.55, -D / 2 + 0.06, 0.01);
     cyh(g, 0.05, 0.03, ch, 0.22, 1.6, -D / 2 + 0.11, 'z', 16);
-    rb(g, 0.5, 0.65, 0.01, pm(0xd5dde2, 0.05, 0.9), -0.15, 0.95, -D / 2 + 0.005, 0.01);
+    rb(g, 0.5, 0.65, 0.01, MIR, -0.15, 0.95, -D / 2 + 0.005, 0.01);
     rb(g, 0.6, 0.03, 0.12, pm(0xe4e4e2, 0.3), -0.1, 0.88, -D / 2 + 0.06, 0.01);
-    rb(g, W, 0.008, D, pm(0xb9bcbf, 0.7), 0, 0, 0, 0.002);   // 洗い場の床（グレー）
   },
   // 浴槽（エプロンつき）。洗い場が +z
   bath(g, W, D, H) {
@@ -559,7 +587,7 @@ const MODELS = {
     sp(g, Math.min(0.2, W * 0.34), 0.012, D * 0.3, pm(0xdfe5e8, 0.15), 0, hh + 0.06, 0.03, 24);
     tb(g, [0, hh + 0.06, -D / 2 + 0.07], [0, hh + 0.24, -D / 2 + 0.07], 0.014, ME()); tb(g, [0, hh + 0.24, -D / 2 + 0.07], [0, hh + 0.22, -D / 2 + 0.16], 0.012, ME());
     rb(g, W, 0.7, 0.13, wh, 0, hh + 0.36, -D / 2 + 0.065, 0.01);
-    rb(g, W - 0.04, 0.62, 0.004, pm(0xd5dde2, 0.05, 0.9), 0, hh + 0.4, -D / 2 + 0.131, 0);
+    rb(g, W - 0.04, 0.62, 0.004, MIR, 0, hh + 0.4, -D / 2 + 0.131, 0);
   },
 };
 // 形のある物を作る。作れたら true
