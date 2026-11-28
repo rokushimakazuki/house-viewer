@@ -468,7 +468,8 @@ const NEIGHBORS = [
   { n: '道路向かいの家', south: true, c: [[-1211, 771], [-522, 973], [-771, 2139], [-1460, 1937]] },
 ];
 const nbr = new THREE.Group(); rig.add(nbr);
-function renderFrame() { if (!renderer.xr.isPresenting && aoOn) composer.render(); else renderer.render(scene, camera); }
+let renderHook = null;   // 暮らしの動きの「上から1・2階」は、画面を2つに分けて描く（そのときは AO なし）
+function renderFrame() { if (!renderer.xr.isPresenting && renderHook && renderHook()) return; if (!renderer.xr.isPresenting && aoOn) composer.render(); else renderer.render(scene, camera); }
 ext = initExtras({
   scene, rig, renderer, camera, composer, models, furn, nbr, NEIGHBORS, ground, state, tex, vars: VARS,
   loadModel: (k) => loadModel(k), curKey: () => curKey(), keyOf: (v, h) => keyOf(v, h), render: renderFrame,
@@ -1073,7 +1074,7 @@ function updateInside(dt) {
   }
 }
 
-window._dbg = { orbit, renderer, drawHud, hudCanvas, postureOf, ext, makeSheet, vpCamera, renderFrame, updateSee, sunDir, setVariant, setHeight, goVP, sunState, setHour, applySun, placeSun, composer, furn, enterInside, exitInside, inside, rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
+window._dbg = { setRenderHook: (f) => { renderHook = f; }, scene, orbit, renderer, drawHud, hudCanvas, postureOf, ext, makeSheet, vpCamera, renderFrame, updateSee, sunDir, setVariant, setHeight, goVP, sunState, setHour, applySun, placeSun, composer, furn, enterInside, exitInside, inside, rig, camera, STARTS, STAKE, placeAtHead, modelToWorld, headPose, heading, rotY, state, onTrigger, handIndex, ctrl };
 let hudTimer = 0;
 function drawHudThrottled() { const n = performance.now(); if (n - hudTimer > 150) { hudTimer = n; drawHud(); } }
 </script>

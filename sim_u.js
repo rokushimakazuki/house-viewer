@@ -254,6 +254,7 @@ const css = `
 #simind .ind .tg{font-weight:400;color:#555;font-size:11px}
 #simind .ind .ar{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid;flex:none}
 #simind .ind.pin{opacity:.85}
+#simind .fltag{position:absolute;left:0;top:0;background:rgba(232,106,51,.92);color:#fff;border-radius:8px;padding:1px 9px;font:700 14px/1.5 "Hiragino Sans","Yu Gothic",sans-serif;pointer-events:none;display:none}
 `;
 let state = null;
 function el(html) { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; }
@@ -271,7 +272,7 @@ function build() {
     <div class="sub" id="simq" style="display:none;color:#ffcf9a"></div>
     <input type="range" id="simt" min="0" max="100" step="0.1" value="0">
     <div class="sub" style="display:flex;gap:6px;align-items:center"><label style="flex:none"><input type="checkbox" id="simsunon" checked> 日差し・暗さも合わせる</label><span id="simsun"></span></div>
-    <div><button data-view="auto" class="on">自動</button><button data-view="1">上から1階</button><button data-view="2">上から2階</button><button data-view="in">中から</button><button data-view="eye">目線で歩く</button>
+    <div><button data-view="auto" class="on">自動</button><button data-view="1">上から1階</button><button data-view="2">上から2階</button><button data-view="both">上から1・2階</button><button data-view="in">中から</button><button data-view="eye">目線で歩く</button>
       <label class="sub"><input type="checkbox" id="simtrail" checked> 歩いた道</label> <label class="sub"><input type="checkbox" id="simdark"> 暗い中の道（黄）</label></div>
     <div><select id="simlt" aria-label="照明の点け方"><option value="all">照明：全部点ける</option><option value="people">照明：人のいる所だけ</option></select><button id="simltb">照明の一覧</button></div>
     <details id="simppl" open><summary><b>家族</b> <span class="sub">名前をタップ＝その人を追いかける</span></summary><div id="simwho"></div></details>
@@ -384,10 +385,10 @@ function update() {
     }
     if (f.userData.lab) f.userData.lab.visible = !q.carried;   // 全員に名札（抱っこ中の赤ちゃんは母の名札にまとめる）
     f.userData.disc.visible = !q.carried && !q.lying;
-    f.visible = isIn() || (q.h > 1.6 ? 2 : 1) === state.floor;   // 上から見るときは、見ている階の人だけ
+    f.visible = isIn() || state.floor === 'both' || (q.h > 1.6 ? 2 : 1) === state.floor;   // 上から見るときは、見ている階の人だけ（1・2階を並べるときは全員）
     if (state.view === 'eye' && (p.id === state.sel || (state.sel === 'mama' && p.id === 'baby' && q.carried))) f.visible = false;   // 目線で歩くときは、自分（と抱っこしている赤ちゃん）は見せない
     if (f.userData.lab) {   // 上から見るときは大きめ。選んだ人はさらに大きく。重ならないよう人ごとに高さをずらす
-      const L = f.userData.lab, k = isIn() ? 1 : (p.id === state.sel ? 2.0 : 1.6), rel = (q.h > 1.6 ? q.h - FL2 : q.h) + (q.lying && !p.baby ? 0.15 : 0),   // 床からの高さ（ベッドの上なら約0.6）
+      const L = f.userData.lab, k = isIn() ? 1 : (p.id === state.sel ? 2.0 : 1.6) * (state.floor === 'both' ? 1.3 : 1), rel = (q.h > 1.6 ? q.h - FL2 : q.h) + (q.lying && !p.baby ? 0.15 : 0),   // 床からの高さ（ベッドの上なら約0.6）
         yy = isIn() ? p.h + 0.25 : 1.0 + PEOPLE.indexOf(p) * 0.17 - rel;   // 上から見るときは床から 1.0〜1.7m（2.1m で切っているのでその下）
       L.scale.copy(L.userData.base).multiplyScalar(k);
       if (q.lying && !p.baby) L.position.set(yy, 0, 0); else L.position.set(0, yy, 0);   // 寝ている人は体が横向きなので、体の x が上
@@ -405,7 +406,7 @@ function update() {
   // 目線で歩くときは、色の線（歩いた道）は視界のじゃまになるので消す。暗い中の道（黄）は壁の向こうを透かさない
   state.trails.visible = state.box.querySelector('#simtrail').checked && state.view !== 'eye';
   if (state.darkG.userData.m) state.darkG.userData.m.depthTest = isIn();
-  for (const m of state.darkG.children) m.visible = isIn() || m.userData.fl === state.floor;
+  for (const m of state.darkG.children) m.visible = isIn() || state.floor === 'both' || m.userData.fl === state.floor;
   eyeCam();
   inval();
 }
@@ -453,6 +454,13 @@ function applyView(force) {
     if (force) { if (!d.inside.on) d.enterInside(); lastFloor = null; const w = state.figs[state.sel].getWorldPosition(new THREE.Vector3()); d.camera.position.set(w.x - 1.0, w.y + 1.55, w.z + 1.0); d.inside.yaw = d.heading(new THREE.Vector3(1, 0, -1)); d.inside.pitch = -0.3; }
     return;
   }
+  if (view === 'both') {
+    d.renderer.clippingPlanes = [];
+    if (!force && lastFloor === 'both') return;
+    lastFloor = 'both'; state.floor = 'both'; state.splitKey = '';
+    if (d.inside.on) { d.exitInside(); const ui = document.getElementById('ui'); if (ui) ui.style.display = 'none'; }
+    inval(); return;   // カメラは splitRender が画面の分け方に合わせて置く
+  }
   if (!force && floor === lastFloor) return;
   lastFloor = floor; state.floor = floor;
   if (d.inside.on) { d.exitInside(); const ui = document.getElementById('ui'); if (ui) ui.style.display = 'none'; }   // 中から戻ったときも説明の板は隠したまま
@@ -466,6 +474,73 @@ function applyView(force) {
     d.camera.position.set(c.x - sx, c.y + 10 * k, c.z + 5 * k - sh); d.orbit.target.set(c.x - sx, c.y, c.z - sh); d.orbit.update();
   }
   inval();
+}
+// ---- 上から1・2階を並べる ----
+// 左上の板をよけた残りの画面を2つに分け、1階と2階をそれぞれ上から描く（1つのカメラを階の高さ分だけずらして、指の操作は両方に効く）。
+// 1階の絵は 1階の床から 2.1m より上を切る。2階の絵は 2階の床から 2.1m より上と、2階の床より下（1階・外）を切る
+const FOOT = [10.6, 9.2];   // 家の大きさ＋余白（m、東西・南北）
+let splitLayT = 0, splitBox = null;
+function splitLayout() {
+  const W = innerWidth, H = innerHeight, now = performance.now();
+  if (!splitBox || now - splitLayT > 300) { splitBox = state.box.getBoundingClientRect(); splitLayT = now; }
+  const b = splitBox;
+  let ax = 0, ay = 0, aw = W, ah = H;
+  // 板の下か右の、広く空いている方を使う
+  const below = (H - b.bottom - 6) * W, right = (W - b.right - 6) * H;
+  if (below >= right && b.bottom < H * 0.75) { ay = b.bottom + 6; ah = H - ay; } else if (b.right < W * 0.75) { ax = b.right + 6; aw = W - ax; }
+  const fit = (cw, ch) => Math.min(cw / FOOT[0], ch / FOOT[1]);
+  const side = fit(aw / 2, ah) >= fit(aw, ah / 2);   // 横に並べる方が大きく描けるなら横、そうでなければ縦
+  const g = 4;
+  const v = side ? [{ fl: 1, x: ax, y: ay, w: aw / 2 - g / 2, h: ah }, { fl: 2, x: ax + aw / 2 + g / 2, y: ay, w: aw / 2 - g / 2, h: ah }]
+                 : [{ fl: 2, x: ax, y: ay, w: aw, h: ah / 2 - g / 2 }, { fl: 1, x: ax, y: ay + ah / 2 + g / 2, w: aw, h: ah / 2 - g / 2 }];   // 縦なら2階が上
+  for (const o of v) { o.x = Math.round(o.x); o.y = Math.round(o.y); o.w = Math.max(1, Math.round(o.w)); o.h = Math.max(1, Math.round(o.h)); }
+  return v;
+}
+// 画面の分け方が変わったら（板をたたむ・画面を回す）、1階の真ん中を見るようにカメラを置き直す
+function splitFrame(cell) {
+  const d = state.d, cam = d.camera;
+  const c = d.furn.localToWorld(new THREE.Vector3(PX(477.75), state.FL1, PZ(409.5)));
+  const vf = cam.fov * Math.PI / 180, asp = cell.w / cell.h, hf = 2 * Math.atan(Math.tan(vf / 2) * asp);
+  const dist = Math.max(FOOT[0] / 2 / Math.tan(hf / 2), FOOT[1] * 0.92 / 2 / Math.tan(vf / 2)) + 2.2;   // 斜めに見るぶん奥行きは少し縮む
+  const dir = new THREE.Vector3(0, 10, 4).normalize();
+  cam.position.copy(c).addScaledVector(dir, dist);
+  if (d.orbit) { d.orbit.target.copy(c); d.orbit.update(); } else cam.lookAt(c);
+}
+const _o1 = new THREE.Vector3(), _o2 = new THREE.Vector3(), _sz = new THREE.Vector2();
+function splitRender() {
+  if (!state || state.view !== 'both' || state.box.style.display === 'none' || state.d.inside.on) { if (state && state.tags) for (const t of state.tags) t.style.display = 'none'; return false; }
+  const d = state.d, r = d.renderer, cam = d.camera, H = innerHeight;
+  const cells = splitLayout(), key = cells.map((o) => [o.x, o.y, o.w, o.h].join(',')).join('|');
+  if (state.splitKey !== key) {
+    state.splitKey = key; splitFrame(cells[0]);
+    // 「1階」「2階」の札
+    if (!state.tags) state.tags = [1, 2].map((n) => { const t = el(`<div class="fltag">${n}階</div>`); state.ind.append(t); return t; });
+    for (const o of cells) { const t = state.tags[o.fl - 1]; t.style.display = 'block'; t.style.transform = `translate(${o.x + 8}px,${o.y + 6}px)`; }
+  }
+  d.furn.updateMatrixWorld();
+  const off = d.furn.localToWorld(_o1.set(0, FL2, 0)).sub(d.furn.localToWorld(_o2.set(0, 0, 0)));   // 1階→2階のずれ（世界座標）
+  const y = (h) => d.furn.localToWorld(_o2.set(0, h, 0)).y;
+  const b1 = state.FL1, b2 = state.FL1 + FL2;
+  const planes = { 1: [new THREE.Plane(new THREE.Vector3(0, -1, 0), y(b1 + 2.1))], 2: [new THREE.Plane(new THREE.Vector3(0, -1, 0), y(b2 + 2.1)), new THREE.Plane(new THREE.Vector3(0, 1, 0), -y(b2 - 0.3))] };
+  r.getSize(_sz);
+  const asp0 = cam.aspect, au = r.shadowMap.autoUpdate;
+  r.setScissorTest(true);
+  r.setViewport(0, 0, _sz.x, _sz.y); r.setScissor(0, 0, _sz.x, _sz.y); r.clear();
+  cells.forEach((o, i) => {
+    r.setViewport(o.x, H - o.y - o.h, o.w, o.h); r.setScissor(o.x, H - o.y - o.h, o.w, o.h);
+    cam.aspect = o.w / o.h; cam.updateProjectionMatrix();
+    if (o.fl === 2) cam.position.add(off);
+    cam.updateMatrixWorld();
+    r.clippingPlanes = planes[o.fl];
+    if (i > 0) r.shadowMap.autoUpdate = false;   // 影は1回目に作ったものを使う
+    r.render(d.scene, cam);
+    r.shadowMap.autoUpdate = au;
+    if (o.fl === 2) { cam.position.sub(off); cam.updateMatrixWorld(); }
+  });
+  r.setScissorTest(false); r.setViewport(0, 0, _sz.x, _sz.y);
+  cam.aspect = asp0; cam.updateProjectionMatrix();
+  r.clippingPlanes = [];
+  return true;
 }
 // ---- 日差しと暗さ ----
 // 暮らしの動きの時刻に合わせて、太陽の位置（季節はこの板か、日差しの板で選んだもの）を動かす。
@@ -582,6 +657,7 @@ function drawInd() {
   const d = state.d, cam = d.camera, ind = state.ind;
   if (d.renderer.xr && d.renderer.xr.isPresenting) { ind.style.display = 'none'; indSig = ''; return; }
   if (ind.style.display !== 'block') ind.style.display = 'block';
+  if (state.floor === 'both' && !isIn()) { if (indSig !== 'both') { indSig = 'both'; for (const k in state.chips) state.chips[k].style.display = 'none'; } return; }
   const W = innerWidth, H = innerHeight, top = !isIn();
   cam.updateMatrixWorld();
   // 板の位置・大きさは 0.3 秒ごとに測る（毎コマ測ると iPad で重い）
@@ -705,6 +781,7 @@ function open() {
 function close() {
   if (state.view === 'eye') { state.view = 'auto'; for (const b of state.box.querySelectorAll('[data-view]')) b.classList.toggle('on', b.dataset.view === 'auto'); }
   eyeOff(); restoreQuality(); if (window._light) window._light.setOcc(null);
+  if (state.tags) for (const t of state.tags) t.style.display = 'none';
   const ui = document.getElementById('ui'); if (ui && !state.d.inside.on) ui.style.display = state.uiDisp || '';
   state.play = false; sunRestore(); state.box.style.display = 'none'; state.root.visible = false; state.ind.style.display = 'none'; state.d.renderer.clippingPlanes = []; lastFloor = null; state.d.applySun && state.d.applySun(); inval();   // 日の当たる床の面積は閉じてから計算し直す
 }
@@ -717,4 +794,5 @@ function addButtons() {
   const b2 = document.createElement('button'); b2.textContent = '暮らしの動き'; b2.onclick = open; bar.parentNode.insertBefore(b2, bar);
 }
 addButtons();
+(function hook() { const d = window._dbg; if (d && d.setRenderHook) d.setRenderHook(() => splitRender()); else setTimeout(hook, 300); })();
 window._sim = { viewFloor: () => (state && !isIn() ? state.floor : null), open, close, plan, analyze, SCEN, SCENES, PEOPLE, N, route, loadScene, darkStudy, perfWatch, isOpen: () => !!state && state.box.style.display !== 'none', playing: () => !!state && state.play && state.box.style.display !== 'none' };

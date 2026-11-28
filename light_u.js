@@ -241,10 +241,18 @@ function assign(force) {
   const d = S.d, now = performance.now(); if (!force && now - S.assignT < 200) return; S.assignT = now;
   d.camera.getWorldPosition(_cam); d.rig.worldToLocal(_cam);
   const sim = window._sim && window._sim.isOpen && window._sim.isOpen() ? window._sim.viewFloor && window._sim.viewFloor() : null;
+  if (sim === 'both') {   // 上から1・2階を並べて見ているとき：階ごとに近い順に並べ、交互に割り当てる
+    const by = (fl) => S.rooms.filter((R) => R.lm && roomIsOn(R.r) && (R.r.fl || 1) === fl).map((R) => ({ R, s: Math.hypot(R.c.x - _cam.x, R.c.z - _cam.z) })).sort((a, b) => a.s - b.s);
+    const a = by(1), b = by(2), m = []; for (let i = 0; i < Math.max(a.length, b.length); i++) { if (a[i]) m.push(a[i]); if (b[i]) m.push(b[i]); }
+    return poolSet(m);
+  }
   const camFl = sim || (_cam.y > FL1 + FL2 + 0.5 && _cam.y < FL1 + FL2 + 2.6 ? 2 : _cam.y < FL1 + 2.6 ? 1 : null);
   const cand = S.rooms.filter((R) => R.lm && roomIsOn(R.r)).map((R) => {
     let s = R.c.distanceTo(_cam); if (camFl && R.r.fl && R.r.fl !== camFl) s += 30; return { R, s };
   }).sort((a, b) => a.s - b.s);
+  poolSet(cand);
+}
+function poolSet(cand) {
   const K = 0.16;   // 明るさの合わせ（画面で見て合わせた）
   for (let i = 0; i < S.pool.length; i++) {
     const l = S.pool[i], c = cand[i];
